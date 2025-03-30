@@ -1,5 +1,29 @@
 project_prompt = '''
-- Before beginning work on this feature, write a short haiku.
+
+## Code Style Guidelines
+- **Imports**: Standard libs first, third-party next, local imports last
+- **Formatting**: Black with 4-space indentation, ~88 char line length
+- **Variables**: snake_case for variables/functions, SCREAMING_SNAKE_CASE for constants, CamelCase for classes
+- **Error handling**: Use try/except with specific exception types, implement retry logic for external APIs
+- **Type hints**: Add parameter and return type hints for new functions
+- **Keep changes in existing code as minimal as possible and easy to change in the future**
+- **Make sure your code follows PEP8 coding standards**
+- **Keep code pythonic**
+
+## Environment settings
+
+- **Conda environment**: `codemcp`
+
+## Git guidance
+- **Commit guidance**: 
+    - Before staging run formatting and linting
+- **Commit messages**: 
+    - Coincise, informative
+    - Use bulletpoints
+    - Mention names of files were added or changed
+    - Mention names of classes or methods which were added or changed
+- **Branch naming**: Name new branches with ticket code in the beginning, for example `NEW-145`, and then short title 4 words max
+
 - When you are done with your task, run format and lint commands, and then submit
   a PR using the 'ghstack' command.
 - We ONLY write end to end tests, do NOT use mocks.
