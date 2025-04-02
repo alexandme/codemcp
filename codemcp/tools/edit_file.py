@@ -824,13 +824,17 @@ async def edit_file_content(
         with open(change_file, "w") as f:
             json.dump(change_info, f, indent=2)
         
-        # Return the diff with instructions on how to approve or reject
+        # Store the change_id in a persistent location
+        # Create a change ID file for simple approval
+        id_file = PENDING_CHANGES_DIR / f"current_{chat_id}.txt"
+        with open(id_file, "w") as f:
+            f.write(change_id)
+            
+        # Return the diff without instructions that might lead to auto-approval
         return (
             f"Proposed changes to {full_file_path}:\n\n"
             f"{diff_text}\n\n"
-            f"To apply this change, use: approve_change(\"{change_id}\")\n"
-            f"To reject this change, use: reject_change(\"{change_id}\")\n"
-            f"Change ID: {change_id}"
+            f"Type 'approve' to apply this change or 'reject' to cancel it."
         )
 
     # Create directory if it doesn't exist

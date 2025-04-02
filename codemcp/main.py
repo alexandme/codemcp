@@ -109,6 +109,9 @@ async def codemcp(
             "ApproveChange": {"change_id", "chat_id"},
             "RejectChange": {"change_id", "chat_id"},
             "ListPendingChanges": {"chat_id"},
+            # Simple approval commands
+            "Approve": {"chat_id"},
+            "Reject": {"chat_id"},
         }
 
         # Check if subtool exists
@@ -392,6 +395,52 @@ async def codemcp(
                 raise ValueError("chat_id is required for ListPendingChanges subtool")
                 
             return await list_pending_changes()
+            
+        if subtool == "Approve":
+            if chat_id is None:
+                raise ValueError("chat_id is required for Approve subtool")
+                
+            # Get the current change_id from the stored file
+            from pathlib import Path
+            from .tools.edit_file import PENDING_CHANGES_DIR
+            
+            id_file = PENDING_CHANGES_DIR / f"current_{chat_id}.txt"
+            if not id_file.exists():
+                return "No pending change found to approve. Please make a change first."
+                
+            with open(id_file, "r") as f:
+                change_id = f.read().strip()
+                
+            # Call the regular approve_change function with the retrieved change_id
+            result = await approve_change(change_id)
+            
+            # Remove the current change ID file
+            id_file.unlink(missing_ok=True)
+            
+            return result
+            
+        if subtool == "Reject":
+            if chat_id is None:
+                raise ValueError("chat_id is required for Reject subtool")
+                
+            # Get the current change_id from the stored file
+            from pathlib import Path
+            from .tools.edit_file import PENDING_CHANGES_DIR
+            
+            id_file = PENDING_CHANGES_DIR / f"current_{chat_id}.txt"
+            if not id_file.exists():
+                return "No pending change found to reject. Please make a change first."
+                
+            with open(id_file, "r") as f:
+                change_id = f.read().strip()
+                
+            # Call the regular reject_change function with the retrieved change_id
+            result = await reject_change(change_id)
+            
+            # Remove the current change ID file
+            id_file.unlink(missing_ok=True)
+            
+            return result
     except Exception:
         logging.error("Exception", exc_info=True)
         raise

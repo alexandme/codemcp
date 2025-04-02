@@ -469,31 +469,29 @@ Example:
   chmod a+x path/to/file  # Makes a file executable by all users
   chmod a-x path/to/file  # Makes a file non-executable for all users
 
-## ApproveChange chat_id change_id
+## Approve chat_id
 
-Approves and applies a previously previewed change. When EditFile or WriteFile tools are 
-used in preview mode (which is the default), they return a change_id that can be used with 
-this tool to apply the change.
+Approves and applies the most recently previewed change. When EditFile or WriteFile tools are 
+used in preview mode (which is the default), you can use this simple command to approve
+the change without needing to specify the change ID.
 
 Args:
-    change_id: The unique ID of the change to approve (provided by EditFile/WriteFile)
     chat_id: The unique ID to identify the chat session
 
 Example:
-  ApproveChange "550e8400-e29b-41d4-a716-446655440000"
+  Approve
 
-## RejectChange chat_id change_id
+## Reject chat_id
 
-Rejects a previously previewed change. When EditFile or WriteFile tools are used 
-in preview mode (default), they return a change_id that can be used with this tool 
-to reject the change without applying it.
+Rejects the most recently previewed change. When EditFile or WriteFile tools are used 
+in preview mode (default), you can use this simple command to reject the change
+without needing to specify the change ID.
 
 Args:
-    change_id: The unique ID of the change to reject (provided by EditFile/WriteFile)
     chat_id: The unique ID to identify the chat session
 
 Example:
-  RejectChange "550e8400-e29b-41d4-a716-446655440000"
+  Reject
 
 ## ListPendingChanges chat_id
 
@@ -509,7 +507,7 @@ Example:
 ## Summary
 
 Args:
-    subtool: The subtool to execute (ReadFile, WriteFile, EditFile, LS, InitProject, UserPrompt, RunCommand, RM, Think, Chmod, ApproveChange, RejectChange, ListPendingChanges)
+    subtool: The subtool to execute (ReadFile, WriteFile, EditFile, LS, InitProject, UserPrompt, RunCommand, RM, Think, Chmod, Approve, Reject, ListPendingChanges)
     path: The path to the file or directory to operate on
     content: Content for WriteFile subtool (any type will be serialized to string if needed)
     old_string: String to replace for EditFile subtool
