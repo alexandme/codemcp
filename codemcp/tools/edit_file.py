@@ -22,20 +22,20 @@ from ..line_endings import detect_line_endings
 # Set up logger
 logger = logging.getLogger(__name__)
 
-# Session state to track pending changes
-import json
-import tempfile
-import uuid
-from pathlib import Path
-
-# Create a directory for pending changes
-PENDING_CHANGES_DIR = Path(tempfile.gettempdir()) / "codemcp_pending_changes"
-PENDING_CHANGES_DIR.mkdir(exist_ok=True)
-
-# Dictionary to track pending changes in memory
-pending_changes = {}
-# Track whether to prompt for commit
-commit_prompt_enabled = True
+# Import session state from central location
+from ..approval_state import (
+    PENDING_CHANGES_DIR,
+    pending_changes,
+    commit_prompt_enabled,
+    get_current_change_id,
+    set_current_change_id,
+    clear_current_change_id,
+    store_pending_change,
+    get_pending_change,
+    remove_pending_change,
+    set_commit_prompt,
+    is_commit_prompt_enabled,
+)
 
 __all__ = [
     "edit_file_content",
@@ -805,10 +805,7 @@ async def edit_file_content(
         
         diff_text = "\n".join(diff)
         
-        # Create a unique ID for this change
-        change_id = str(uuid.uuid4())
-        
-        # Store the change in memory and on disk
+        # Create change info dictionary
         change_info = {
             "type": "edit",
             "file_path": full_file_path,
@@ -820,18 +817,11 @@ async def edit_file_content(
             "line_endings": line_endings
         }
         
-        pending_changes[change_id] = change_info
+        # Store the change using approval_state module
+        change_id = store_pending_change(change_info)
         
-        # Also store to disk for persistence
-        change_file = PENDING_CHANGES_DIR / f"{change_id}.json"
-        with open(change_file, "w") as f:
-            json.dump(change_info, f, indent=2)
-        
-        # Store the change_id in a persistent location
-        # Create a change ID file for simple approval
-        id_file = PENDING_CHANGES_DIR / f"current_{chat_id}.txt"
-        with open(id_file, "w") as f:
-            f.write(change_id)
+        # Store the change_id as the current change for this chat
+        set_current_change_id(chat_id, change_id)
             
         # Return the diff without instructions that might lead to auto-approval
         return (
@@ -877,20 +867,12 @@ async def approve_change(change_id: str) -> str:
     Returns:
         A success message
     """
+    # Get the change info using centralized function
+    change_info = get_pending_change(change_id)
+    
     # Check if the change exists
-    if change_id not in pending_changes and not (PENDING_CHANGES_DIR / f"{change_id}.json").exists():
+    if change_info is None:
         return f"Error: Change with ID {change_id} not found."
-    
-    # Load the change info from disk if not in memory
-    if change_id not in pending_changes:
-        try:
-            with open(PENDING_CHANGES_DIR / f"{change_id}.json", "r") as f:
-                change_info = json.load(f)
-                pending_changes[change_id] = change_info
-        except Exception as e:
-            return f"Error loading change: {str(e)}"
-    
-    change_info = pending_changes[change_id]
     
     try:
         # Apply the change based on its type
@@ -907,17 +889,11 @@ async def approve_change(change_id: str) -> str:
                 change_info["line_endings"]
             )
             
-            # Clean up
-            if change_id in pending_changes:
-                del pending_changes[change_id]
-            
-            change_file = PENDING_CHANGES_DIR / f"{change_id}.json"
-            if change_file.exists():
-                change_file.unlink()
+            # Clean up using centralized function
+            remove_pending_change(change_id)
             
             # Check if we should commit automatically or prompt for confirmation
-            global commit_prompt_enabled
-            if commit_prompt_enabled:
+            if is_commit_prompt_enabled():
                 # Just apply the change without committing
                 return (
                     f"Change applied to {change_info['file_path']}. "
@@ -949,17 +925,11 @@ async def approve_change(change_id: str) -> str:
                 change_info["line_endings"]
             )
             
-            # Clean up
-            if change_id in pending_changes:
-                del pending_changes[change_id]
-            
-            change_file = PENDING_CHANGES_DIR / f"{change_id}.json"
-            if change_file.exists():
-                change_file.unlink()
+            # Clean up using centralized function
+            remove_pending_change(change_id)
             
             # Check if we should commit automatically or prompt for confirmation
-            global commit_prompt_enabled
-            if commit_prompt_enabled:
+            if is_commit_prompt_enabled():
                 # Just apply the change without committing
                 return (
                     f"Content written to {change_info['file_path']}. "
@@ -994,27 +964,18 @@ async def reject_change(change_id: str) -> str:
     Returns:
         A confirmation message
     """
+    # Get the change info
+    change_info = get_pending_change(change_id)
+    
     # Check if the change exists
-    if change_id not in pending_changes and not (PENDING_CHANGES_DIR / f"{change_id}.json").exists():
+    if change_info is None:
         return f"Error: Change with ID {change_id} not found."
     
-    # Clean up
-    if change_id in pending_changes:
-        file_path = pending_changes[change_id].get("file_path", "unknown file")
-        del pending_changes[change_id]
-    else:
-        # Get file path from disk
-        try:
-            with open(PENDING_CHANGES_DIR / f"{change_id}.json", "r") as f:
-                change_info = json.load(f)
-                file_path = change_info.get("file_path", "unknown file")
-        except Exception:
-            file_path = "unknown file"
+    # Get the file path before removing the change
+    file_path = change_info.get("file_path", "unknown file")
     
-    # Remove from disk
-    change_file = PENDING_CHANGES_DIR / f"{change_id}.json"
-    if change_file.exists():
-        change_file.unlink()
+    # Remove the change
+    remove_pending_change(change_id)
     
     return f"Rejected change to {file_path} (ID: {change_id})"
 
@@ -1035,10 +996,14 @@ async def list_pending_changes() -> str:
     
     for change_file in pending_files:
         try:
-            with open(change_file, "r") as f:
-                change_info = json.load(f)
-                change_id = change_file.stem
+            # Skip files that aren't change files (like current_*.txt)
+            if not change_file.name.endswith('.json'):
+                continue
                 
+            change_id = change_file.stem
+            change_info = get_pending_change(change_id)
+            
+            if change_info:
                 result += f"ID: {change_id}\n"
                 result += f"File: {change_info.get('file_path', 'unknown')}\n"
                 result += f"Type: {change_info.get('type', 'unknown')}\n"
@@ -1050,22 +1015,6 @@ async def list_pending_changes() -> str:
     return result
 
 
-def set_commit_prompt(enabled: bool = True) -> str:
-    """Enable or disable commit prompting.
-    
-    When enabled, the system will ask for confirmation before committing changes.
-    When disabled, changes will be committed automatically after approval.
-    
-    Args:
-        enabled: Whether to enable commit prompting
-        
-    Returns:
-        A confirmation message
-    """
-    global commit_prompt_enabled
-    commit_prompt_enabled = enabled
-    
-    if enabled:
-        return "Commit prompting enabled. You will be asked to confirm before changes are committed."
-    else:
-        return "Commit prompting disabled. Changes will be committed automatically after approval."
+# Import set_commit_prompt from approval_state.py instead
+# This is just a wrapper function for backward compatibility
+# The actual implementation is in approval_state.py

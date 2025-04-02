@@ -15,8 +15,16 @@ from ..file_utils import (
 from ..git import commit_changes
 from ..line_endings import detect_line_endings, detect_repo_line_endings
 
-# Use the same pending changes system as edit_file
-from .edit_file import PENDING_CHANGES_DIR, pending_changes
+# Use centralized approval state management
+from ..approval_state import (
+    PENDING_CHANGES_DIR,
+    pending_changes,
+    store_pending_change,
+    set_current_change_id,
+    get_pending_change,
+    remove_pending_change,
+    is_commit_prompt_enabled
+)
 
 __all__ = [
     "write_file_content",
@@ -94,10 +102,7 @@ async def write_file_content(
         
         action = "updating" if old_file_exists else "creating"
         
-        # Create a unique ID for this change
-        change_id = str(uuid.uuid4())
-        
-        # Store the change in memory and on disk
+        # Create change info dictionary
         change_info = {
             "type": "write",
             "file_path": file_path,
@@ -107,18 +112,11 @@ async def write_file_content(
             "line_endings": line_endings
         }
         
-        pending_changes[change_id] = change_info
+        # Store the change using approval_state module
+        change_id = store_pending_change(change_info)
         
-        # Also store to disk for persistence
-        change_file = PENDING_CHANGES_DIR / f"{change_id}.json"
-        with open(change_file, "w") as f:
-            json.dump(change_info, f, indent=2)
-        
-        # Store the change_id in a persistent location
-        # Create a change ID file for simple approval
-        id_file = PENDING_CHANGES_DIR / f"current_{chat_id}.txt"
-        with open(id_file, "w") as f:
-            f.write(change_id)
+        # Store the change_id as the current change for this chat
+        set_current_change_id(chat_id, change_id)
             
         # Return the diff without instructions that might lead to auto-approval
         return (
@@ -161,19 +159,13 @@ async def apply_write(
     Returns:
         A success message
     """
-    # Temporarily set auto_edit to True
-    original_auto_edit = session_state["auto_edit"]
-    session_state["auto_edit"] = True
-    
-    try:
-        result = await write_file_content(
-            file_path,
-            content,
-            description,
-            chat_id,
-        )
-    finally:
-        # Restore original auto_edit setting
-        session_state["auto_edit"] = original_auto_edit
+    # Skip preview mode to apply changes immediately
+    result = await write_file_content(
+        file_path,
+        content,
+        description,
+        chat_id,
+        preview=False
+    )
     
     return result

@@ -11,8 +11,13 @@ from .tools.chmod import chmod
 from .tools.edit_file import (
     edit_file_content,
     approve_change,
-    reject_change,
+    reject_change, 
     list_pending_changes,
+)
+from .approval_state import (
+    get_current_change_id,
+    clear_current_change_id,
+    set_commit_prompt,
 )
 from .tools.glob import MAX_RESULTS, glob_files
 from .tools.grep import grep_files
@@ -403,22 +408,17 @@ async def codemcp(
             if chat_id is None:
                 raise ValueError("chat_id is required for Approve subtool")
                 
-            # Get the current change_id from the stored file
-            from pathlib import Path
-            from .tools.edit_file import PENDING_CHANGES_DIR
+            # Get the current change_id from the approval state
             
-            id_file = PENDING_CHANGES_DIR / f"current_{chat_id}.txt"
-            if not id_file.exists():
+            change_id = get_current_change_id(chat_id)
+            if not change_id:
                 return "No pending change found to approve. Please make a change first."
-                
-            with open(id_file, "r") as f:
-                change_id = f.read().strip()
                 
             # Call the regular approve_change function with the retrieved change_id
             result = await approve_change(change_id)
             
-            # Remove the current change ID file
-            id_file.unlink(missing_ok=True)
+            # Clear the current change ID
+            clear_current_change_id(chat_id)
             
             return result
             
@@ -426,22 +426,17 @@ async def codemcp(
             if chat_id is None:
                 raise ValueError("chat_id is required for Reject subtool")
                 
-            # Get the current change_id from the stored file
-            from pathlib import Path
-            from .tools.edit_file import PENDING_CHANGES_DIR
+            # Get the current change_id from the approval state
             
-            id_file = PENDING_CHANGES_DIR / f"current_{chat_id}.txt"
-            if not id_file.exists():
+            change_id = get_current_change_id(chat_id)
+            if not change_id:
                 return "No pending change found to reject. Please make a change first."
-                
-            with open(id_file, "r") as f:
-                change_id = f.read().strip()
                 
             # Call the regular reject_change function with the retrieved change_id
             result = await reject_change(change_id)
             
-            # Remove the current change ID file
-            id_file.unlink(missing_ok=True)
+            # Clear the current change ID
+            clear_current_change_id(chat_id)
             
             return result
             
@@ -449,7 +444,7 @@ async def codemcp(
             if chat_id is None:
                 raise ValueError("chat_id is required for SetCommitPrompt subtool")
                 
-            from .tools.edit_file import set_commit_prompt
+            # Use the set_commit_prompt function imported at the top of the file
             
             enabled_value = False
             if "enabled" in provided_params:
