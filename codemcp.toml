@@ -24,6 +24,24 @@ project_prompt = '''
     - Mention names of classes or methods which were added or changed
 - **Branch naming**: Name new branches with ticket code in the beginning, for example `NEW-145`, and then short title 4 words max
 
+## Change Approval Workflow
+CodeMCP now includes a change approval workflow that requires user confirmation before applying changes:
+
+1. When you use EditFile or WriteFile tools:
+   - A diff of the proposed changes will be shown
+   - Options to approve, approve and enable auto mode, or skip will be presented
+
+2. The user can respond with:
+   - 1: Apply just this change (calls ApplyChange/ApplyWrite)
+   - 2: Apply and enable auto mode for future changes (calls SetAutoEdit + ApplyChange/ApplyWrite)
+   - 3: Skip the change
+
+3. Use the following tools for this workflow:
+   - set_auto_edit: Enable/disable automatic application of changes
+   - apply_change: Apply a previously proposed file edit
+   - apply_write: Apply a previously proposed file write
+   - commit_staged_changes: Commit all staged changes with a message
+
 - When you are done with your task, run format and lint commands, and then submit
   a PR using the 'ghstack' command.
 - We ONLY write end to end tests, do NOT use mocks.

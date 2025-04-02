@@ -22,9 +22,15 @@ from ..line_endings import detect_line_endings
 # Set up logger
 logger = logging.getLogger(__name__)
 
+# Session state to track auto_edit setting
+session_state = {"auto_edit": False}
+
 __all__ = [
     "edit_file_content",
     "find_similar_file",
+    "apply_change",
+    "set_auto_edit",
+    "commit_staged_changes",
 ]
 
 
@@ -610,6 +616,10 @@ async def edit_file_content(
     before matching. This helps match files where the only difference is in trailing
     whitespace on otherwise empty lines.
 
+    If auto_edit is False (default), this function will generate a diff preview
+    and return it with options to apply the change, enable auto mode, or skip.
+    If auto_edit is True, changes will be applied immediately.
+
     Args:
         file_path: The absolute path to the file to edit
         old_string: The text to replace
@@ -619,7 +629,7 @@ async def edit_file_content(
         chat_id: The unique ID of the current chat session
 
     Returns:
-        A success message
+        A success message or a diff preview with options if auto_edit is False
 
     Note:
         This function allows creating new files when old_string is empty and the file doesn't exist.
@@ -762,6 +772,32 @@ async def edit_file_content(
             "No changes were made despite passing all checks. This is unexpected.",
         )
 
+    # If auto_edit is False, generate a diff and return it with options
+    if not session_state["auto_edit"]:
+        # Generate the diff
+        content_lines = content.splitlines()
+        updated_lines = updated_file.splitlines()
+        
+        diff = list(difflib.unified_diff(
+            content_lines,
+            updated_lines,
+            fromfile=f"a/{os.path.basename(full_file_path)}",
+            tofile=f"b/{os.path.basename(full_file_path)}",
+            lineterm="",
+        ))
+        
+        diff_text = "\n".join(diff)
+        
+        # Return the diff with options
+        return (
+            f"Proposed changes to {full_file_path}:\n\n"
+            f"{diff_text}\n\n"
+            f"Options:\n"
+            f"1. Apply this change\n"
+            f"2. Apply this change and enable auto mode for future changes\n"
+            f"3. Skip this change"
+        )
+
     # Create directory if it doesn't exist
     directory = os.path.dirname(full_file_path)
     os.makedirs(directory, exist_ok=True)
@@ -788,3 +824,94 @@ async def edit_file_content(
         git_message = f"\n\nFailed to commit changes to git: {message}"
 
     return f"Successfully edited {full_file_path}\n\nHere's a snippet of the edited file:\n{snippet}{git_message}"
+
+
+async def apply_change(
+    file_path: str,
+    old_string: str,
+    new_string: str,
+    read_file_timestamps: dict[str, float] | None = None,
+    description: str = "",
+    chat_id: str = "",
+) -> str:
+    """Apply a previously proposed change to a file.
+
+    This function is called after edit_file_content when the user approves a change.
+    It applies the same edit but skips the diff generation and approval step.
+
+    Args:
+        file_path: The absolute path to the file to edit
+        old_string: The text to replace
+        new_string: The new text to replace old_string with
+        read_file_timestamps: Dictionary mapping file paths to timestamps when they were last read
+        description: Short description of the change
+        chat_id: The unique ID of the current chat session
+
+    Returns:
+        A success message
+
+    """
+    # Temporarily set auto_edit to True
+    original_auto_edit = session_state["auto_edit"]
+    session_state["auto_edit"] = True
+    
+    try:
+        result = await edit_file_content(
+            file_path,
+            old_string,
+            new_string,
+            read_file_timestamps,
+            description,
+            chat_id,
+        )
+    finally:
+        # Restore original auto_edit setting
+        session_state["auto_edit"] = original_auto_edit
+    
+    return result
+
+
+def set_auto_edit(enabled: bool = True) -> str:
+    """Set the auto_edit flag to enable or disable automatic applying of changes.
+
+    Args:
+        enabled: Whether to enable auto_edit mode
+
+    Returns:
+        A confirmation message
+    """
+    session_state["auto_edit"] = enabled
+    status = "enabled" if enabled else "disabled"
+    return f"Auto-edit mode {status}. {'Changes will be applied automatically.' if enabled else 'Changes will require approval before being applied.'}"
+
+
+async def commit_staged_changes(
+    description: str = "",
+    chat_id: str = "",
+) -> str:
+    """Commit all staged changes to git.
+
+    Args:
+        description: Commit message describing the changes
+        chat_id: The unique ID of the current chat session
+
+    Returns:
+        A success message
+    """
+    from ..git_query import get_repository_root
+
+    # Get repository root
+    repo_root = await get_repository_root(os.getcwd())
+    
+    # Commit all staged changes
+    success, message = await commit_changes(
+        repo_root,
+        description,
+        chat_id,
+        commit_all=True,
+    )
+    
+    if success:
+        return f"Successfully committed changes: {message}"
+    else:
+        return f"Failed to commit changes: {message}"
