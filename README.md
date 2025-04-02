@@ -180,11 +180,4 @@ command = ["./run_test.sh"]
 doc = "Accepts a pytest-style test selector as an argument to run a specific test."
 ```
 
-## Troubleshooting
-
-To run the server with inspector, use:
-
-```
-PYTHONPATH=. mcp dev codemcp/__main__.py
-```
 
