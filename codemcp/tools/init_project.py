@@ -469,34 +469,36 @@ Example:
   chmod a+x path/to/file  # Makes a file executable by all users
   chmod a-x path/to/file  # Makes a file non-executable for all users
 
-## Approve chat_id
+## ApproveLastChange chat_id
 
 Approves and applies the most recently previewed change. When EditFile or WriteFile tools are 
-used in preview mode (which is the default), you can use this simple command to approve
-the change without needing to specify the change ID.
+used in preview mode (which is the default), you MUST call this tool if the user's response
+is simply "approve" or indicates clear approval of the last previewed change.
+Do NOT use UserPrompt for simple approval messages.
 
-IMPORTANT: The Approve command ONLY applies the changes to the files. It does NOT automatically commit them!
+IMPORTANT: The ApproveLastChange command ONLY applies the changes to the files. It does NOT automatically commit them!
 The user must explicitly type a separate CommitChanges command after this step.
-NEVER automatically run the CommitChanges command after Approve - wait for explicit user input!
+NEVER automatically run the CommitChanges command after ApproveLastChange - wait for explicit user input!
 
 Args:
     chat_id: The unique ID to identify the chat session
 
 Example:
-  Approve
+  ApproveLastChange
   <!-- Then wait for user to explicitly type CommitChanges -->
 
-## Reject chat_id
+## RejectLastChange chat_id
 
 Rejects the most recently previewed change. When EditFile or WriteFile tools are used 
-in preview mode (default), you can use this simple command to reject the change
-without needing to specify the change ID.
+in preview mode (default), you MUST call this tool if the user's response
+is simply "reject" or indicates clear rejection of the last previewed change.
+Do NOT use UserPrompt for simple rejection messages.
 
 Args:
     chat_id: The unique ID to identify the chat session
 
 Example:
-  Reject
+  RejectLastChange
 
 ## SetCommitPrompt chat_id enabled
 
@@ -518,8 +520,8 @@ This is used when SetCommitPrompt is enabled to explicitly commit changes
 after they have been applied to files.
 
 IMPORTANT: This command should ONLY be called when explicitly requested by the user.
-NEVER automatically run this command after Approve - wait for the user to type a new command!
-After Approve, pause and wait for the user to decide what to do next.
+NEVER automatically run this command after ApproveLastChange - wait for the user to type a new command!
+After ApproveLastChange, pause and wait for the user to decide what to do next.
 
 Args:
     description: Commit message describing the changes
@@ -543,7 +545,7 @@ Example:
 ## Summary
 
 Args:
-    subtool: The subtool to execute (ReadFile, WriteFile, EditFile, LS, InitProject, UserPrompt, RunCommand, RM, Think, Chmod, Approve, Reject, ListPendingChanges, SetCommitPrompt, CommitChanges)
+    subtool: The subtool to execute (ReadFile, WriteFile, EditFile, LS, InitProject, UserPrompt, RunCommand, RM, Think, Chmod, ApproveLastChange, RejectLastChange, ListPendingChanges, SetCommitPrompt, CommitChanges)
     path: The path to the file or directory to operate on
     content: Content for WriteFile subtool (any type will be serialized to string if needed)
     old_string: String to replace for EditFile subtool

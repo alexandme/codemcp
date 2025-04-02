@@ -118,11 +118,11 @@ async def write_file_content(
         # Store the change_id as the current change for this chat
         set_current_change_id(chat_id, change_id)
             
-        # Return the diff without instructions that might lead to auto-approval
+        # Return the diff with clear instructions for manual approval
         return (
             f"Proposed changes for {action} {file_path}:\n\n"
             f"{diff_text}\n\n"
-            f"Type 'approve' to apply this change or 'reject' to cancel it."
+            f"Type 'APPROVE' or 'REJECT' (all caps) to apply or cancel this change."
         )
 
     # Write the content with UTF-8 encoding and proper line endings

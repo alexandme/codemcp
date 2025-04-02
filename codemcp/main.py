@@ -8,7 +8,7 @@ import click
 from mcp.server.fastmcp import FastMCP
 
 from .tools.chmod import chmod
-from .tools.edit_file import (
+from .tools.edit_file import (  # noqa: F401 - Keep for potential future use
     edit_file_content,
     approve_change,
     reject_change, 
@@ -110,13 +110,13 @@ async def codemcp(
             "RM": {"path", "description", "chat_id"},
             "Think": {"thought", "chat_id"},
             "Chmod": {"path", "mode", "chat_id"},
-            # New tools for change approval workflow
-            "ApproveChange": {"change_id", "chat_id"},
+            # Tools for change approval workflow
+            "ApproveChange": {"change_id", "chat_id"},  # Approve specific change by ID
             "RejectChange": {"change_id", "chat_id"},
             "ListPendingChanges": {"chat_id"},
             # Simple approval commands
-            "Approve": {"chat_id"},
-            "Reject": {"chat_id"},
+            "ApproveLastChange": {"chat_id"},
+            "RejectLastChange": {"chat_id"},
             # Commit control
             "SetCommitPrompt": {"enabled", "chat_id"},
             "CommitChanges": {"description", "chat_id"},
@@ -404,12 +404,12 @@ async def codemcp(
                 
             return await list_pending_changes()
             
-        if subtool == "Approve":
+        if subtool == "ApproveLastChange":
             if chat_id is None:
-                raise ValueError("chat_id is required for Approve subtool")
+                raise ValueError("chat_id is required for ApproveLastChange subtool")
                 
             # Get the current change_id from the approval state
-            
+            # Use the imported function directly
             change_id = get_current_change_id(chat_id)
             if not change_id:
                 return "No pending change found to approve. Please make a change first."
@@ -422,12 +422,12 @@ async def codemcp(
             
             return result
             
-        if subtool == "Reject":
+        if subtool == "RejectLastChange":
             if chat_id is None:
-                raise ValueError("chat_id is required for Reject subtool")
+                raise ValueError("chat_id is required for RejectLastChange subtool")
                 
             # Get the current change_id from the approval state
-            
+            # Use the imported function directly
             change_id = get_current_change_id(chat_id)
             if not change_id:
                 return "No pending change found to reject. Please make a change first."
@@ -442,7 +442,7 @@ async def codemcp(
             
         if subtool == "SetCommitPrompt":
             if chat_id is None:
-                raise ValueError("chat_id is required for SetCommitPrompt subtool")
+                raise ValueError("chat_id is required for SetCommitPrompt subtool")  # type: ignore
                 
             # Use the set_commit_prompt function imported at the top of the file
             
@@ -454,7 +454,7 @@ async def codemcp(
                 else:
                     enabled_value = bool(provided_params["enabled"])
             
-            return set_commit_prompt(enabled_value)
+            return set_commit_prompt(enabled_value)  # type: ignore
             
         if subtool == "CommitChanges":
             if chat_id is None:
