@@ -25,22 +25,33 @@ project_prompt = '''
 - **Branch naming**: Name new branches with ticket code in the beginning, for example `NEW-145`, and then short title 4 words max
 
 ## Change Approval Workflow
-CodeMCP now includes a change approval workflow that requires user confirmation before applying changes:
+CodeMCP now includes a preview-and-approve workflow for code changes:
 
 1. When you use EditFile or WriteFile tools:
-   - A diff of the proposed changes will be shown
-   - Options to approve, approve and enable auto mode, or skip will be presented
+   - By default, they operate in preview mode (preview=True)
+   - A diff of the proposed changes is shown
+   - A unique change_id is provided for approving or rejecting the change
 
-2. The user can respond with:
-   - 1: Apply just this change (calls ApplyChange/ApplyWrite)
-   - 2: Apply and enable auto mode for future changes (calls SetAutoEdit + ApplyChange/ApplyWrite)
-   - 3: Skip the change
+2. To apply or reject a change:
+   - Use ApproveChange with the change_id to apply the change
+   - Use RejectChange with the change_id to discard the change
+   - Use ListPendingChanges to see all pending changes
 
-3. Use the following tools for this workflow:
-   - set_auto_edit: Enable/disable automatic application of changes
-   - apply_change: Apply a previously proposed file edit
-   - apply_write: Apply a previously proposed file write
-   - commit_staged_changes: Commit all staged changes with a message
+3. For immediate changes (skipping preview):
+   - Specify preview=False when calling EditFile or WriteFile
+   - This applies changes immediately without the approval step
+
+Example usage:
+```
+# Preview a change first
+EditFile(path="/path/to/file.py", old_string="...", new_string="...", description="Fix bug")
+# Returns a change_id like "550e8400-e29b-41d4-a716-446655440000"
+
+# Then approve or reject
+ApproveChange(change_id="550e8400-e29b-41d4-a716-446655440000")
+# or
+RejectChange(change_id="550e8400-e29b-41d4-a716-446655440000")
+```
 
 - When you are done with your task, run format and lint commands, and then submit
   a PR using the 'ghstack' command.

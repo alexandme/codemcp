@@ -22,15 +22,25 @@ from ..line_endings import detect_line_endings
 # Set up logger
 logger = logging.getLogger(__name__)
 
-# Session state to track auto_edit setting
-session_state = {"auto_edit": False}
+# Session state to track pending changes
+import json
+import tempfile
+import uuid
+from pathlib import Path
+
+# Create a directory for pending changes
+PENDING_CHANGES_DIR = Path(tempfile.gettempdir()) / "codemcp_pending_changes"
+PENDING_CHANGES_DIR.mkdir(exist_ok=True)
+
+# Dictionary to track pending changes in memory
+pending_changes = {}
 
 __all__ = [
     "edit_file_content",
-    "find_similar_file",
-    "apply_change",
-    "set_auto_edit",
-    "commit_staged_changes",
+    "find_similar_file", 
+    "approve_change",
+    "reject_change",
+    "list_pending_changes",
 ]
 
 
@@ -608,17 +618,20 @@ async def edit_file_content(
     read_file_timestamps: dict[str, float] | None = None,
     description: str = "",
     chat_id: str = "",
+    preview: bool = True,  # Default to preview mode
 ) -> str:
     """Edit a file by replacing old_string with new_string.
+
+    In preview mode (default), this function generates a diff of the proposed changes
+    without applying them. A change_id is created and returned which can be used with
+    approve_change or reject_change to apply or discard the changes.
+
+    If preview is False, changes are applied immediately.
 
     If the old_string is not found in the file, attempts a fallback mechanism
     where trailing whitespace is stripped from blank lines (lines with only whitespace)
     before matching. This helps match files where the only difference is in trailing
     whitespace on otherwise empty lines.
-
-    If auto_edit is False (default), this function will generate a diff preview
-    and return it with options to apply the change, enable auto mode, or skip.
-    If auto_edit is True, changes will be applied immediately.
 
     Args:
         file_path: The absolute path to the file to edit
@@ -627,9 +640,10 @@ async def edit_file_content(
         read_file_timestamps: Dictionary mapping file paths to timestamps when they were last read
         description: Short description of the change
         chat_id: The unique ID of the current chat session
+        preview: Whether to preview changes without applying them (default: True)
 
     Returns:
-        A success message or a diff preview with options if auto_edit is False
+        A success message or a diff preview if in preview mode
 
     Note:
         This function allows creating new files when old_string is empty and the file doesn't exist.
@@ -772,8 +786,8 @@ async def edit_file_content(
             "No changes were made despite passing all checks. This is unexpected.",
         )
 
-    # If auto_edit is False, generate a diff and return it with options
-    if not session_state["auto_edit"]:
+    # If in preview mode, generate a diff and store the change for later approval
+    if preview:
         # Generate the diff
         content_lines = content.splitlines()
         updated_lines = updated_file.splitlines()
@@ -788,14 +802,35 @@ async def edit_file_content(
         
         diff_text = "\n".join(diff)
         
-        # Return the diff with options
+        # Create a unique ID for this change
+        change_id = str(uuid.uuid4())
+        
+        # Store the change in memory and on disk
+        change_info = {
+            "type": "edit",
+            "file_path": full_file_path,
+            "old_content": content,
+            "new_content": updated_file,
+            "description": description,
+            "chat_id": chat_id,
+            "timestamp": str(os.path.getmtime(full_file_path)) if os.path.exists(full_file_path) else "0",
+            "line_endings": line_endings
+        }
+        
+        pending_changes[change_id] = change_info
+        
+        # Also store to disk for persistence
+        change_file = PENDING_CHANGES_DIR / f"{change_id}.json"
+        with open(change_file, "w") as f:
+            json.dump(change_info, f, indent=2)
+        
+        # Return the diff with instructions on how to approve or reject
         return (
             f"Proposed changes to {full_file_path}:\n\n"
             f"{diff_text}\n\n"
-            f"Options:\n"
-            f"1. Apply this change\n"
-            f"2. Apply this change and enable auto mode for future changes\n"
-            f"3. Skip this change"
+            f"To apply this change, use: approve_change(\"{change_id}\")\n"
+            f"To reject this change, use: reject_change(\"{change_id}\")\n"
+            f"Change ID: {change_id}"
         )
 
     # Create directory if it doesn't exist
@@ -826,92 +861,165 @@ async def edit_file_content(
     return f"Successfully edited {full_file_path}\n\nHere's a snippet of the edited file:\n{snippet}{git_message}"
 
 
-async def apply_change(
-    file_path: str,
-    old_string: str,
-    new_string: str,
-    read_file_timestamps: dict[str, float] | None = None,
-    description: str = "",
-    chat_id: str = "",
-) -> str:
-    """Apply a previously proposed change to a file.
-
-    This function is called after edit_file_content when the user approves a change.
-    It applies the same edit but skips the diff generation and approval step.
+async def approve_change(change_id: str) -> str:
+    """Approve and apply a previously previewed change.
 
     Args:
-        file_path: The absolute path to the file to edit
-        old_string: The text to replace
-        new_string: The new text to replace old_string with
-        read_file_timestamps: Dictionary mapping file paths to timestamps when they were last read
-        description: Short description of the change
-        chat_id: The unique ID of the current chat session
+        change_id: The unique ID of the change to approve
 
     Returns:
         A success message
-
     """
-    # Temporarily set auto_edit to True
-    original_auto_edit = session_state["auto_edit"]
-    session_state["auto_edit"] = True
+    # Check if the change exists
+    if change_id not in pending_changes and not (PENDING_CHANGES_DIR / f"{change_id}.json").exists():
+        return f"Error: Change with ID {change_id} not found."
+    
+    # Load the change info from disk if not in memory
+    if change_id not in pending_changes:
+        try:
+            with open(PENDING_CHANGES_DIR / f"{change_id}.json", "r") as f:
+                change_info = json.load(f)
+                pending_changes[change_id] = change_info
+        except Exception as e:
+            return f"Error loading change: {str(e)}"
+    
+    change_info = pending_changes[change_id]
     
     try:
-        result = await edit_file_content(
-            file_path,
-            old_string,
-            new_string,
-            read_file_timestamps,
-            description,
-            chat_id,
-        )
-    finally:
-        # Restore original auto_edit setting
-        session_state["auto_edit"] = original_auto_edit
+        # Apply the change based on its type
+        if change_info["type"] == "edit":
+            # Create directory if it doesn't exist
+            directory = os.path.dirname(change_info["file_path"])
+            os.makedirs(directory, exist_ok=True)
+            
+            # Write the content to the file
+            await write_text_content(
+                change_info["file_path"], 
+                change_info["new_content"], 
+                "utf-8", 
+                change_info["line_endings"]
+            )
+            
+            # Commit the change
+            success, message = await commit_changes(
+                change_info["file_path"],
+                change_info["description"],
+                change_info["chat_id"]
+            )
+            
+            # Clean up
+            if change_id in pending_changes:
+                del pending_changes[change_id]
+            
+            change_file = PENDING_CHANGES_DIR / f"{change_id}.json"
+            if change_file.exists():
+                change_file.unlink()
+            
+            if success:
+                return f"Successfully applied and committed change to {change_info['file_path']}: {message}"
+            else:
+                return f"Applied change but failed to commit: {message}"
+        
+        elif change_info["type"] == "write":
+            # Create directory if it doesn't exist
+            directory = os.path.dirname(change_info["file_path"])
+            os.makedirs(directory, exist_ok=True)
+            
+            # Write the content to the file
+            await write_text_content(
+                change_info["file_path"], 
+                change_info["content"], 
+                "utf-8", 
+                change_info["line_endings"]
+            )
+            
+            # Commit the change
+            success, message = await commit_changes(
+                change_info["file_path"],
+                change_info["description"],
+                change_info["chat_id"]
+            )
+            
+            # Clean up
+            if change_id in pending_changes:
+                del pending_changes[change_id]
+            
+            change_file = PENDING_CHANGES_DIR / f"{change_id}.json"
+            if change_file.exists():
+                change_file.unlink()
+            
+            if success:
+                return f"Successfully wrote to and committed {change_info['file_path']}: {message}"
+            else:
+                return f"Wrote to file but failed to commit: {message}"
+                
+        # Handle other types of changes if needed
+        return f"Unknown change type: {change_info.get('type', 'unknown')}"
     
-    return result
+    except Exception as e:
+        return f"Error applying change: {str(e)}"
 
 
-def set_auto_edit(enabled: bool = True) -> str:
-    """Set the auto_edit flag to enable or disable automatic applying of changes.
+async def reject_change(change_id: str) -> str:
+    """Reject a previously previewed change.
 
     Args:
-        enabled: Whether to enable auto_edit mode
+        change_id: The unique ID of the change to reject
 
     Returns:
         A confirmation message
     """
-    session_state["auto_edit"] = enabled
-    status = "enabled" if enabled else "disabled"
-    return f"Auto-edit mode {status}. {'Changes will be applied automatically.' if enabled else 'Changes will require approval before being applied.'}"
+    # Check if the change exists
+    if change_id not in pending_changes and not (PENDING_CHANGES_DIR / f"{change_id}.json").exists():
+        return f"Error: Change with ID {change_id} not found."
+    
+    # Clean up
+    if change_id in pending_changes:
+        file_path = pending_changes[change_id].get("file_path", "unknown file")
+        del pending_changes[change_id]
+    else:
+        # Get file path from disk
+        try:
+            with open(PENDING_CHANGES_DIR / f"{change_id}.json", "r") as f:
+                change_info = json.load(f)
+                file_path = change_info.get("file_path", "unknown file")
+        except Exception:
+            file_path = "unknown file"
+    
+    # Remove from disk
+    change_file = PENDING_CHANGES_DIR / f"{change_id}.json"
+    if change_file.exists():
+        change_file.unlink()
+    
+    return f"Rejected change to {file_path} (ID: {change_id})"
 
 
-async def commit_staged_changes(
-    description: str = "",
-    chat_id: str = "",
-) -> str:
-    """Commit all staged changes to git.
-
-    Args:
-        description: Commit message describing the changes
-        chat_id: The unique ID of the current chat session
+async def list_pending_changes() -> str:
+    """List all pending changes.
 
     Returns:
-        A success message
+        A formatted list of pending changes
     """
-    from ..git_query import get_repository_root
-
-    # Get repository root
-    repo_root = await get_repository_root(os.getcwd())
+    # Load all pending changes from disk
+    pending_files = list(PENDING_CHANGES_DIR.glob("*.json"))
     
-    # Commit all staged changes
-    success, message = await commit_changes(
-        repo_root,
-        description,
-        chat_id,
-        commit_all=True,
-    )
+    if not pending_files:
+        return "No pending changes found."
     
-    if success:
-        return f"Successfully committed changes: {message}"
-    else:
-        return f"Failed to commit changes: {message}"
+    result = "Pending changes:\n\n"
+    
+    for change_file in pending_files:
+        try:
+            with open(change_file, "r") as f:
+                change_info = json.load(f)
+                change_id = change_file.stem
+                
+                result += f"ID: {change_id}\n"
+                result += f"File: {change_info.get('file_path', 'unknown')}\n"
+                result += f"Type: {change_info.get('type', 'unknown')}\n"
+                result += f"Description: {change_info.get('description', 'No description')}\n"
+                result += "---\n"
+        except Exception as e:
+            result += f"Error loading change {change_file.name}: {str(e)}\n---\n"
+    
+    return result

@@ -2,6 +2,9 @@
 
 import difflib
 import os
+import json
+import uuid
+from pathlib import Path
 
 from ..file_utils import (
     async_open_text,
@@ -12,32 +15,34 @@ from ..file_utils import (
 from ..git import commit_changes
 from ..line_endings import detect_line_endings, detect_repo_line_endings
 
-# Import session_state from edit_file to ensure consistent auto_edit setting
-from .edit_file import session_state
+# Use the same pending changes system as edit_file
+from .edit_file import PENDING_CHANGES_DIR, pending_changes
 
 __all__ = [
     "write_file_content",
-    "apply_write",
 ]
 
 
 async def write_file_content(
-    file_path: str, content: str, description: str = "", chat_id: str = ""
+    file_path: str, content: str, description: str = "", chat_id: str = "", preview: bool = True
 ) -> str:
     """Write content to a file.
 
-    If auto_edit is False (default), this function will generate a diff preview
-    and return it with options to apply the change, enable auto mode, or skip.
-    If auto_edit is True, changes will be applied immediately.
+    In preview mode (default), this function generates a diff of the proposed changes
+    without applying them. A change_id is created and returned which can be used with
+    approve_change or reject_change to apply or discard the changes.
+
+    If preview is False, changes are applied immediately.
 
     Args:
         file_path: The absolute path to the file to write
         content: The content to write to the file
         description: Short description of the change
         chat_id: The unique ID of the current chat session
+        preview: Whether to preview changes without applying them (default: True)
 
     Returns:
-        A success message or a diff preview with options if auto_edit is False
+        A success message or a diff preview in preview mode
 
     Note:
         This function allows creating new files that don't exist yet.
@@ -71,8 +76,8 @@ async def write_file_content(
         directory = os.path.dirname(file_path)
         os.makedirs(directory, exist_ok=True)
 
-    # If auto_edit is False, generate a diff and return it with options
-    if not session_state["auto_edit"]:
+    # If in preview mode, generate a diff and store for later approval
+    if preview:
         # Generate the diff
         current_lines = current_content.splitlines() if current_content else []
         new_lines = content.splitlines()
@@ -89,14 +94,33 @@ async def write_file_content(
         
         action = "updating" if old_file_exists else "creating"
         
-        # Return the diff with options
+        # Create a unique ID for this change
+        change_id = str(uuid.uuid4())
+        
+        # Store the change in memory and on disk
+        change_info = {
+            "type": "write",
+            "file_path": file_path,
+            "content": content,
+            "description": description,
+            "chat_id": chat_id,
+            "line_endings": line_endings
+        }
+        
+        pending_changes[change_id] = change_info
+        
+        # Also store to disk for persistence
+        change_file = PENDING_CHANGES_DIR / f"{change_id}.json"
+        with open(change_file, "w") as f:
+            json.dump(change_info, f, indent=2)
+        
+        # Return the diff with instructions on how to approve or reject
         return (
             f"Proposed changes for {action} {file_path}:\n\n"
             f"{diff_text}\n\n"
-            f"Options:\n"
-            f"1. Apply this change\n"
-            f"2. Apply this change and enable auto mode for future changes\n"
-            f"3. Skip this change"
+            f"To apply this change, use: approve_change(\"{change_id}\")\n"
+            f"To reject this change, use: reject_change(\"{change_id}\")\n"
+            f"Change ID: {change_id}"
         )
 
     # Write the content with UTF-8 encoding and proper line endings
