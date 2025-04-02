@@ -34,6 +34,8 @@ PENDING_CHANGES_DIR.mkdir(exist_ok=True)
 
 # Dictionary to track pending changes in memory
 pending_changes = {}
+# Track whether to prompt for commit
+commit_prompt_enabled = True
 
 __all__ = [
     "edit_file_content",
@@ -41,6 +43,7 @@ __all__ = [
     "approve_change",
     "reject_change",
     "list_pending_changes",
+    "set_commit_prompt",
 ]
 
 
@@ -904,13 +907,6 @@ async def approve_change(change_id: str) -> str:
                 change_info["line_endings"]
             )
             
-            # Commit the change
-            success, message = await commit_changes(
-                change_info["file_path"],
-                change_info["description"],
-                change_info["chat_id"]
-            )
-            
             # Clean up
             if change_id in pending_changes:
                 del pending_changes[change_id]
@@ -919,10 +915,26 @@ async def approve_change(change_id: str) -> str:
             if change_file.exists():
                 change_file.unlink()
             
-            if success:
-                return f"Successfully applied and committed change to {change_info['file_path']}: {message}"
+            # Check if we should commit automatically or prompt for confirmation
+            global commit_prompt_enabled
+            if commit_prompt_enabled:
+                # Just apply the change without committing
+                return (
+                    f"Change applied to {change_info['file_path']}. "
+                    f"To commit this change, use: CommitChanges with a commit description."
+                )
             else:
-                return f"Applied change but failed to commit: {message}"
+                # Commit the change automatically
+                success, message = await commit_changes(
+                    change_info["file_path"],
+                    change_info["description"],
+                    change_info["chat_id"]
+                )
+                
+                if success:
+                    return f"Successfully applied and committed change to {change_info['file_path']}: {message}"
+                else:
+                    return f"Applied change but failed to commit: {message}"
         
         elif change_info["type"] == "write":
             # Create directory if it doesn't exist
@@ -937,13 +949,6 @@ async def approve_change(change_id: str) -> str:
                 change_info["line_endings"]
             )
             
-            # Commit the change
-            success, message = await commit_changes(
-                change_info["file_path"],
-                change_info["description"],
-                change_info["chat_id"]
-            )
-            
             # Clean up
             if change_id in pending_changes:
                 del pending_changes[change_id]
@@ -952,10 +957,26 @@ async def approve_change(change_id: str) -> str:
             if change_file.exists():
                 change_file.unlink()
             
-            if success:
-                return f"Successfully wrote to and committed {change_info['file_path']}: {message}"
+            # Check if we should commit automatically or prompt for confirmation
+            global commit_prompt_enabled
+            if commit_prompt_enabled:
+                # Just apply the change without committing
+                return (
+                    f"Content written to {change_info['file_path']}. "
+                    f"To commit this change, use: CommitChanges with a commit description."
+                )
             else:
-                return f"Wrote to file but failed to commit: {message}"
+                # Commit the change automatically
+                success, message = await commit_changes(
+                    change_info["file_path"],
+                    change_info["description"],
+                    change_info["chat_id"]
+                )
+                
+                if success:
+                    return f"Successfully wrote to and committed {change_info['file_path']}: {message}"
+                else:
+                    return f"Wrote to file but failed to commit: {message}"
                 
         # Handle other types of changes if needed
         return f"Unknown change type: {change_info.get('type', 'unknown')}"
@@ -1027,3 +1048,24 @@ async def list_pending_changes() -> str:
             result += f"Error loading change {change_file.name}: {str(e)}\n---\n"
     
     return result
+
+
+def set_commit_prompt(enabled: bool = True) -> str:
+    """Enable or disable commit prompting.
+    
+    When enabled, the system will ask for confirmation before committing changes.
+    When disabled, changes will be committed automatically after approval.
+    
+    Args:
+        enabled: Whether to enable commit prompting
+        
+    Returns:
+        A confirmation message
+    """
+    global commit_prompt_enabled
+    commit_prompt_enabled = enabled
+    
+    if enabled:
+        return "Commit prompting enabled. You will be asked to confirm before changes are committed."
+    else:
+        return "Commit prompting disabled. Changes will be committed automatically after approval."

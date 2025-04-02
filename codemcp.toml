@@ -24,34 +24,38 @@ project_prompt = '''
     - Mention names of classes or methods which were added or changed
 - **Branch naming**: Name new branches with ticket code in the beginning, for example `NEW-145`, and then short title 4 words max
 
-## Change Approval Workflow
-CodeMCP now includes a simple preview-and-approve workflow for code changes:
+## Change Approval and Commit Workflow
+CodeMCP now includes a multi-step workflow for code changes:
 
-1. When you use EditFile or WriteFile tools:
-   - By default, they operate in preview mode (preview=True)
+1. Preview Step:
+   - EditFile/WriteFile tools operate in preview mode by default
    - A diff of the proposed changes is shown
-   - You'll be prompted to approve or reject the change
+   - You must explicitly approve or reject each change
 
-2. User interaction is required:
-   - When a change is previewed, the user can type "approve" to apply it
-   - Or type "reject" to discard the change
-   - Claude will not automatically approve changes
-
-3. Simplified commands:
+2. Approval Step:
    - Type "approve" to apply the most recent change
    - Type "reject" to discard the most recent change
-   - Use ListPendingChanges to see all pending changes
+   - Claude will not automatically approve changes
 
-4. For immediate changes (skipping preview):
-   - Specify preview=False when calling EditFile or WriteFile
-   - This applies changes immediately without requiring approval
+3. Commit Step (optional):
+   - By default, commit prompting is enabled (SetCommitPrompt true)
+   - When enabled, changes are applied but not committed automatically
+   - You must use CommitChanges to commit applied changes
+   - To disable this feature: SetCommitPrompt false
+
+4. Key Commands:
+   - Approve: Apply the most recent change
+   - Reject: Discard the most recent change
+   - CommitChanges: Commit applied changes with a message
+   - SetCommitPrompt: Enable/disable commit prompting
+   - ListPendingChanges: View all pending changes
 
 Example workflow:
 ```
 # Claude proposes a change with a preview
-# User reviews the diff
-# User types "approve" or "reject"
-# Claude executes the appropriate action
+# User reviews and types "approve"
+# Change is applied but not committed
+# User types "CommitChanges" with a message to commit
 ```
 
 - When you are done with your task, run format and lint commands, and then submit

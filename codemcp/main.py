@@ -112,6 +112,9 @@ async def codemcp(
             # Simple approval commands
             "Approve": {"chat_id"},
             "Reject": {"chat_id"},
+            # Commit control
+            "SetCommitPrompt": {"enabled", "chat_id"},
+            "CommitChanges": {"description", "chat_id"},
         }
 
         # Check if subtool exists
@@ -441,6 +444,49 @@ async def codemcp(
             id_file.unlink(missing_ok=True)
             
             return result
+            
+        if subtool == "SetCommitPrompt":
+            if chat_id is None:
+                raise ValueError("chat_id is required for SetCommitPrompt subtool")
+                
+            from .tools.edit_file import set_commit_prompt
+            
+            enabled_value = False
+            if "enabled" in provided_params:
+                # Handle both string and boolean inputs
+                if isinstance(provided_params["enabled"], str):
+                    enabled_value = provided_params["enabled"].lower() == "true"
+                else:
+                    enabled_value = bool(provided_params["enabled"])
+            
+            return set_commit_prompt(enabled_value)
+            
+        if subtool == "CommitChanges":
+            if chat_id is None:
+                raise ValueError("chat_id is required for CommitChanges subtool")
+                
+            if description is None:
+                raise ValueError("description is required for CommitChanges subtool")
+                
+            # Import what we need
+            from .git_query import get_repository_root
+            from .git import commit_changes
+            
+            # Get the repository root
+            repo_root = await get_repository_root(os.getcwd())
+            
+            # Commit all staged changes
+            success, message = await commit_changes(
+                repo_root,
+                description,
+                chat_id,
+                commit_all=True,
+            )
+            
+            if success:
+                return f"Successfully committed changes: {message}"
+            else:
+                return f"Failed to commit changes: {message}"
     except Exception:
         logging.error("Exception", exc_info=True)
         raise

@@ -493,6 +493,32 @@ Args:
 Example:
   Reject
 
+## SetCommitPrompt chat_id enabled
+
+Controls whether changes are committed automatically after approval or require 
+a separate commit step. When enabled, you'll be prompted to commit changes after 
+approving them. When disabled, changes are committed automatically.
+
+Args:
+    enabled: true to enable commit prompting, false to disable
+    chat_id: The unique ID to identify the chat session
+
+Example:
+  SetCommitPrompt true
+
+## CommitChanges chat_id description
+
+Commits staged changes that have been approved but not yet committed.
+This is used when SetCommitPrompt is enabled to explicitly commit changes
+after they have been applied to files.
+
+Args:
+    description: Commit message describing the changes
+    chat_id: The unique ID to identify the chat session
+
+Example:
+  CommitChanges "Fix bug in parser function"
+
 ## ListPendingChanges chat_id
 
 Lists all pending changes that have been previewed but not yet approved or rejected.
@@ -507,7 +533,7 @@ Example:
 ## Summary
 
 Args:
-    subtool: The subtool to execute (ReadFile, WriteFile, EditFile, LS, InitProject, UserPrompt, RunCommand, RM, Think, Chmod, Approve, Reject, ListPendingChanges)
+    subtool: The subtool to execute (ReadFile, WriteFile, EditFile, LS, InitProject, UserPrompt, RunCommand, RM, Think, Chmod, Approve, Reject, ListPendingChanges, SetCommitPrompt, CommitChanges)
     path: The path to the file or directory to operate on
     content: Content for WriteFile subtool (any type will be serialized to string if needed)
     old_string: String to replace for EditFile subtool
