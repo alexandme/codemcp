@@ -33,30 +33,36 @@ CodeMCP now includes a multi-step workflow for code changes:
    - You must explicitly approve or reject each change
 
 2. Approval Step:
-   - Type "approve" to apply the most recent change
-   - Type "reject" to discard the most recent change
-   - Claude will not automatically approve changes
+   - User types "approve" to apply the most recent change
+   - User types "reject" to discard the most recent change
+   - IMPORTANT: Do NOT automatically approve changes!
+   - IMPORTANT: After approval, changes are only applied to files, NOT committed!
 
-3. Commit Step (optional):
-   - By default, commit prompting is enabled (SetCommitPrompt true)
-   - When enabled, changes are applied but not committed automatically
-   - You must use CommitChanges to commit applied changes
-   - To disable this feature: SetCommitPrompt false
+3. Commit Step (Required, Separate User Command):
+   - IMPORTANT: This step requires a new, explicit command from the user
+   - After approving changes, STOP and wait for user input
+   - Only when the user explicitly types a CommitChanges command should you proceed
+   - NEVER automatically run the CommitChanges tool after Approve
+   - The user must manually type "CommitChanges" with a message
 
 4. Key Commands:
-   - Approve: Apply the most recent change
+   - Approve: Apply the most recent change to files only
    - Reject: Discard the most recent change
-   - CommitChanges: Commit applied changes with a message
+   - CommitChanges: (Separate step) Commit applied changes with a message
    - SetCommitPrompt: Enable/disable commit prompting
    - ListPendingChanges: View all pending changes
 
-Example workflow:
+Example workflow (THREE separate user messages):
 ```
-# Claude proposes a change with a preview
-# User reviews and types "approve"
-# Change is applied but not committed
-# User types "CommitChanges" with a message to commit
+# 1. Claude proposes a change with a preview
+# 2. User reviews and types "approve" 
+#    (Claude applies changes to files ONLY and STOPS, waiting for next user input)
+# 3. User types "CommitChanges" with a message to commit
+#    (Only NOW does Claude commit the changes)
 ```
+
+CRITICAL: Do not proceed to step 3 automatically. Wait for explicit user input!
+NEVER chain Approve and CommitChanges together in one response!
 
 - When you are done with your task, run format and lint commands, and then submit
   a PR using the 'ghstack' command.

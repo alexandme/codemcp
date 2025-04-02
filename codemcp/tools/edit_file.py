@@ -896,8 +896,10 @@ async def approve_change(change_id: str) -> str:
             if is_commit_prompt_enabled():
                 # Just apply the change without committing
                 return (
-                    f"Change applied to {change_info['file_path']}. "
-                    f"To commit this change, use: CommitChanges with a commit description."
+                    f"Change applied to {change_info['file_path']}.\n\n"
+                    f"IMPORTANT: Changes are NOT automatically committed. "
+                    f"Wait for the user to explicitly type a new command to commit these changes.\n\n"
+                    f"The user must type: CommitChanges with a commit description."
                 )
             else:
                 # Commit the change automatically
@@ -932,8 +934,10 @@ async def approve_change(change_id: str) -> str:
             if is_commit_prompt_enabled():
                 # Just apply the change without committing
                 return (
-                    f"Content written to {change_info['file_path']}. "
-                    f"To commit this change, use: CommitChanges with a commit description."
+                    f"Content written to {change_info['file_path']}.\n\n"
+                    f"IMPORTANT: Changes are NOT automatically committed. "
+                    f"Wait for the user to explicitly type a new command to commit these changes.\n\n"
+                    f"The user must type: CommitChanges with a commit description."
                 )
             else:
                 # Commit the change automatically

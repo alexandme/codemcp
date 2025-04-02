@@ -475,11 +475,16 @@ Approves and applies the most recently previewed change. When EditFile or WriteF
 used in preview mode (which is the default), you can use this simple command to approve
 the change without needing to specify the change ID.
 
+IMPORTANT: The Approve command ONLY applies the changes to the files. It does NOT automatically commit them!
+The user must explicitly type a separate CommitChanges command after this step.
+NEVER automatically run the CommitChanges command after Approve - wait for explicit user input!
+
 Args:
     chat_id: The unique ID to identify the chat session
 
 Example:
   Approve
+  <!-- Then wait for user to explicitly type CommitChanges -->
 
 ## Reject chat_id
 
@@ -512,11 +517,16 @@ Commits staged changes that have been approved but not yet committed.
 This is used when SetCommitPrompt is enabled to explicitly commit changes
 after they have been applied to files.
 
+IMPORTANT: This command should ONLY be called when explicitly requested by the user.
+NEVER automatically run this command after Approve - wait for the user to type a new command!
+After Approve, pause and wait for the user to decide what to do next.
+
 Args:
     description: Commit message describing the changes
     chat_id: The unique ID to identify the chat session
 
 Example:
+  <!-- User types: -->
   CommitChanges "Fix bug in parser function"
 
 ## ListPendingChanges chat_id
