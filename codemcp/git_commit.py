@@ -198,11 +198,13 @@ async def perform_commit(
     if not commit_all and os.path.isfile(abs_path) and not os.path.exists(abs_path):
         return False, f"File does not exist: {abs_path}"
 
+    # Get the directory - if path is a file, use its directory, otherwise use the path itself
+    directory = os.path.dirname(abs_path) if os.path.isfile(abs_path) else abs_path
+
     # Get the git repository root for more reliable operations
     from .git_query import get_repository_root
 
     git_cwd = await get_repository_root(directory)
-    directory = os.path.dirname(abs_path) if os.path.isfile(abs_path) else abs_path
     # Handle commit_all mode
     if commit_all:
         # Check if working directory has uncommitted changes

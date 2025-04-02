@@ -24,7 +24,6 @@ logger = logging.getLogger(__name__)
 
 __all__ = [
     "edit_file_content",
-    "find_similar_file",
 ]
 
 
@@ -765,46 +764,7 @@ async def edit_file_content(
             "No changes were made despite passing all checks. This is unexpected.",
         )
 
-    # If in preview mode, generate a diff and store the change for later approval
-    if preview:
-        # Generate the diff
-        content_lines = content.splitlines()
-        updated_lines = updated_file.splitlines()
 
-        diff = list(difflib.unified_diff(
-            content_lines,
-            updated_lines,
-            fromfile=f"a/{os.path.basename(full_file_path)}",
-            tofile=f"b/{os.path.basename(full_file_path)}",
-            lineterm="",
-        ))
-
-        diff_text = "\n".join(diff)
-
-        # Create change info dictionary
-        change_info = {
-            "type": "edit",
-            "file_path": full_file_path,
-            "old_content": content,
-            "new_content": updated_file,
-            "description": description,
-            "chat_id": chat_id,
-            "timestamp": str(os.path.getmtime(full_file_path)) if os.path.exists(full_file_path) else "0",
-            "line_endings": line_endings
-        }
-
-        # Store the change using approval_state module
-        change_id = store_pending_change(change_info)
-
-        # Store the change_id as the current change for this chat
-        set_current_change_id(chat_id, change_id)
-
-        # Return the diff with clear instructions for manual approval
-        return (
-            f"Proposed changes to {full_file_path}:\n\n"
-            f"{diff_text}\n\n"
-            f"Type 'APPROVE' or 'REJECT' (all caps) to apply or cancel this change."
-        )
 
     # Create directory if it doesn't exist
     directory = os.path.dirname(full_file_path)
@@ -820,16 +780,15 @@ async def edit_file_content(
     # Generate a snippet of the edited file to show in the response
     snippet = get_edit_snippet(content, old_string, new_string)
 
-    # Commit the changes
-    git_message = ""
-    success, message = await commit_changes(full_file_path, description, chat_id)
-    if success:
-        git_message = f"\n\nChanges committed to git: {description}"
-        # Include any extra details like previous commit hash if present in the message
-        if "previous commit was" in message:
-            git_message = f"\n\n{message}"
-    else:
-        git_message = f"\n\nFailed to commit changes to git: {message}"
+    # Stage the changes
+    await run_command(
+        ["git", "add", full_file_path],
+        cwd=directory,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    git_message = "\n\nChanges staged. Use CommitChanges tool to commit."
 
     return f"Successfully edited {full_file_path}\n\nHere's a snippet of the edited file:\n{snippet}{git_message}"
 
