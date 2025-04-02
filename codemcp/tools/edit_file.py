@@ -15,35 +15,16 @@ from ..file_utils import (
     check_file_path_and_permissions,
     check_git_tracking_for_existing_file,
     write_text_content,
-)
-from ..git import commit_changes
+) # Removed commit_changes import
 from ..line_endings import detect_line_endings
+from ..shell import run_command # Import run_command for git add
 
 # Set up logger
 logger = logging.getLogger(__name__)
 
-# Import session state from central location
-from ..approval_state import (
-    PENDING_CHANGES_DIR,
-    pending_changes,
-    commit_prompt_enabled,
-    get_current_change_id,
-    set_current_change_id,
-    clear_current_change_id,
-    store_pending_change,
-    get_pending_change,
-    remove_pending_change,
-    set_commit_prompt,
-    is_commit_prompt_enabled,
-)
-
 __all__ = [
     "edit_file_content",
-    "find_similar_file", 
-    "approve_change",
-    "reject_change",
-    "list_pending_changes",
-    "set_commit_prompt",
+    "find_similar_file",
 ]
 
 
@@ -621,15 +602,10 @@ async def edit_file_content(
     read_file_timestamps: dict[str, float] | None = None,
     description: str = "",
     chat_id: str = "",
-    preview: bool = True,  # Default to preview mode
+    preview: bool = False, # Preview mode is removed, default to False
 ) -> str:
     """Edit a file by replacing old_string with new_string.
 
-    In preview mode (default), this function generates a diff of the proposed changes
-    without applying them. A change_id is created and returned which can be used with
-    approve_change or reject_change to apply or discard the changes.
-
-    If preview is False, changes are applied immediately.
 
     If the old_string is not found in the file, attempts a fallback mechanism
     where trailing whitespace is stripped from blank lines (lines with only whitespace)
@@ -643,7 +619,7 @@ async def edit_file_content(
         read_file_timestamps: Dictionary mapping file paths to timestamps when they were last read
         description: Short description of the change
         chat_id: The unique ID of the current chat session
-        preview: Whether to preview changes without applying them (default: True)
+        preview: (Deprecated) This parameter is ignored. Changes are always applied directly.
 
     Returns:
         A success message or a diff preview if in preview mode
@@ -794,7 +770,7 @@ async def edit_file_content(
         # Generate the diff
         content_lines = content.splitlines()
         updated_lines = updated_file.splitlines()
-        
+
         diff = list(difflib.unified_diff(
             content_lines,
             updated_lines,
@@ -802,9 +778,9 @@ async def edit_file_content(
             tofile=f"b/{os.path.basename(full_file_path)}",
             lineterm="",
         ))
-        
+
         diff_text = "\n".join(diff)
-        
+
         # Create change info dictionary
         change_info = {
             "type": "edit",
@@ -816,13 +792,13 @@ async def edit_file_content(
             "timestamp": str(os.path.getmtime(full_file_path)) if os.path.exists(full_file_path) else "0",
             "line_endings": line_endings
         }
-        
+
         # Store the change using approval_state module
         change_id = store_pending_change(change_info)
-        
+
         # Store the change_id as the current change for this chat
         set_current_change_id(chat_id, change_id)
-            
+
         # Return the diff with clear instructions for manual approval
         return (
             f"Proposed changes to {full_file_path}:\n\n"
@@ -869,29 +845,29 @@ async def approve_change(change_id: str) -> str:
     """
     # Get the change info using centralized function
     change_info = get_pending_change(change_id)
-    
+
     # Check if the change exists
     if change_info is None:
         return f"Error: Change with ID {change_id} not found."
-    
+
     try:
         # Apply the change based on its type
         if change_info["type"] == "edit":
             # Create directory if it doesn't exist
             directory = os.path.dirname(change_info["file_path"])
             os.makedirs(directory, exist_ok=True)
-            
+
             # Write the content to the file
             await write_text_content(
-                change_info["file_path"], 
-                change_info["new_content"], 
-                "utf-8", 
+                change_info["file_path"],
+                change_info["new_content"],
+                "utf-8",
                 change_info["line_endings"]
             )
-            
+
             # Clean up using centralized function
             remove_pending_change(change_id)
-            
+
             # Check if we should commit automatically or prompt for confirmation
             if is_commit_prompt_enabled():
                 # Just apply the change without committing
@@ -908,28 +884,28 @@ async def approve_change(change_id: str) -> str:
                     change_info["description"],
                     change_info["chat_id"]
                 )
-                
+
                 if success:
                     return f"Successfully applied and committed change to {change_info['file_path']}: {message}"
                 else:
                     return f"Applied change but failed to commit: {message}"
-        
+
         elif change_info["type"] == "write":
             # Create directory if it doesn't exist
             directory = os.path.dirname(change_info["file_path"])
             os.makedirs(directory, exist_ok=True)
-            
+
             # Write the content to the file
             await write_text_content(
-                change_info["file_path"], 
-                change_info["content"], 
-                "utf-8", 
+                change_info["file_path"],
+                change_info["content"],
+                "utf-8",
                 change_info["line_endings"]
             )
-            
+
             # Clean up using centralized function
             remove_pending_change(change_id)
-            
+
             # Check if we should commit automatically or prompt for confirmation
             if is_commit_prompt_enabled():
                 # Just apply the change without committing
@@ -946,15 +922,15 @@ async def approve_change(change_id: str) -> str:
                     change_info["description"],
                     change_info["chat_id"]
                 )
-                
+
                 if success:
                     return f"Successfully wrote to and committed {change_info['file_path']}: {message}"
                 else:
                     return f"Wrote to file but failed to commit: {message}"
-                
+
         # Handle other types of changes if needed
         return f"Unknown change type: {change_info.get('type', 'unknown')}"
-    
+
     except Exception as e:
         return f"Error applying change: {str(e)}"
 
@@ -970,17 +946,17 @@ async def reject_change(change_id: str) -> str:
     """
     # Get the change info
     change_info = get_pending_change(change_id)
-    
+
     # Check if the change exists
     if change_info is None:
         return f"Error: Change with ID {change_id} not found."
-    
+
     # Get the file path before removing the change
     file_path = change_info.get("file_path", "unknown file")
-    
+
     # Remove the change
     remove_pending_change(change_id)
-    
+
     return f"Rejected change to {file_path} (ID: {change_id})"
 
 
@@ -992,21 +968,21 @@ async def list_pending_changes() -> str:
     """
     # Load all pending changes from disk
     pending_files = list(PENDING_CHANGES_DIR.glob("*.json"))
-    
+
     if not pending_files:
         return "No pending changes found."
-    
+
     result = "Pending changes:\n\n"
-    
+
     for change_file in pending_files:
         try:
             # Skip files that aren't change files (like current_*.txt)
             if not change_file.name.endswith('.json'):
                 continue
-                
+
             change_id = change_file.stem
             change_info = get_pending_change(change_id)
-            
+
             if change_info:
                 result += f"ID: {change_id}\n"
                 result += f"File: {change_info.get('file_path', 'unknown')}\n"
@@ -1015,7 +991,7 @@ async def list_pending_changes() -> str:
                 result += "---\n"
         except Exception as e:
             result += f"Error loading change {change_file.name}: {str(e)}\n---\n"
-    
+
     return result
 
 

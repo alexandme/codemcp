@@ -8,16 +8,8 @@ import click
 from mcp.server.fastmcp import FastMCP
 
 from .tools.chmod import chmod
-from .tools.edit_file import (  # noqa: F401 - Keep for potential future use
+from .tools.edit_file import (
     edit_file_content,
-    approve_change,
-    reject_change, 
-    list_pending_changes,
-)
-from .approval_state import (
-    get_current_change_id,
-    clear_current_change_id,
-    set_commit_prompt,
 )
 from .tools.glob import MAX_RESULTS, glob_files
 from .tools.grep import grep_files
@@ -58,9 +50,6 @@ async def codemcp(
     reuse_head_chat_id: bool
     | None = None,  # Whether to reuse the chat ID from the HEAD commit
     thought: str | None = None,  # Added for Think tool
-    mode: str | None = None,  # Added for Chmod tool
-    preview: bool | None = None,  # Whether to preview changes (for EditFile/WriteFile)
-    change_id: str | None = None,  # Change ID for ApproveChange/RejectChange
 ) -> str:
     """If and only if the user explicitly asks you to initialize codemcp with
     path, you should invoke this tool.  This will return instructions which you should
@@ -110,16 +99,8 @@ async def codemcp(
             "RM": {"path", "description", "chat_id"},
             "Think": {"thought", "chat_id"},
             "Chmod": {"path", "mode", "chat_id"},
-            # Tools for change approval workflow
-            "ApproveChange": {"change_id", "chat_id"},  # Approve specific change by ID
-            "RejectChange": {"change_id", "chat_id"},
-            "ListPendingChanges": {"chat_id"},
-            # Simple approval commands
-            "ApproveLastChange": {"chat_id"},
-            "RejectLastChange": {"chat_id"},
-            # Commit control
-            "SetCommitPrompt": {"enabled", "chat_id"},
-            "CommitChanges": {"description", "chat_id"},
+            # Commit tool
+            "CommitChanges": {"description", "chat_id"}, # Only commit tool remains
         }
 
         # Check if subtool exists
@@ -172,12 +153,6 @@ async def codemcp(
                 "reuse_head_chat_id": reuse_head_chat_id,
                 # Think tool parameter
                 "thought": thought,
-                # Chmod tool parameter
-                "mode": mode,
-                # Preview parameter
-                "preview": preview,
-                # Change ID for ApproveChange/RejectChange
-                "change_id": change_id,
             }.items()
             if value is not None
         }
@@ -216,10 +191,10 @@ async def codemcp(
 
             if chat_id is None:
                 raise ValueError("chat_id is required for WriteFile subtool")
-                
-            # Default preview to True if not specified
-            preview_mode = True if preview is None else preview
-                
+
+            # Preview mode removed, always apply directly
+            preview_mode = False
+
             return await write_file_content(path, content_str, description, chat_id, preview_mode)
 
         if subtool == "EditFile":
@@ -239,10 +214,10 @@ async def codemcp(
             new_content = new_string or new_str or ""
             if chat_id is None:
                 raise ValueError("chat_id is required for EditFile subtool")
-                
-            # Default preview to True if not specified
-            preview_mode = True if preview is None else preview
-                
+
+            # Preview mode removed, always apply directly
+            preview_mode = False
+
             return await edit_file_content(
                 path, old_content, new_content, None, description, chat_id, preview_mode
             )
@@ -379,105 +354,31 @@ async def codemcp(
             chmod_mode = cast(Literal["a+x", "a-x"], mode)
             result = await chmod(path, chmod_mode, chat_id)
             return result.get("resultForAssistant", "Chmod operation completed")
-            
-        if subtool == "ApproveChange":
-            if change_id is None:
-                raise ValueError("change_id is required for ApproveChange subtool")
-            
-            if chat_id is None:
-                raise ValueError("chat_id is required for ApproveChange subtool")
-                
-            return await approve_change(change_id)
-            
-        if subtool == "RejectChange":
-            if change_id is None:
-                raise ValueError("change_id is required for RejectChange subtool")
-            
-            if chat_id is None:
-                raise ValueError("chat_id is required for RejectChange subtool")
-                
-            return await reject_change(change_id)
-            
-        if subtool == "ListPendingChanges":
-            if chat_id is None:
-                raise ValueError("chat_id is required for ListPendingChanges subtool")
-                
-            return await list_pending_changes()
-            
-        if subtool == "ApproveLastChange":
-            if chat_id is None:
-                raise ValueError("chat_id is required for ApproveLastChange subtool")
-                
-            # Get the current change_id from the approval state
-            # Use the imported function directly
-            change_id = get_current_change_id(chat_id)
-            if not change_id:
-                return "No pending change found to approve. Please make a change first."
-                
-            # Call the regular approve_change function with the retrieved change_id
-            result = await approve_change(change_id)
-            
-            # Clear the current change ID
-            clear_current_change_id(chat_id)
-            
-            return result
-            
-        if subtool == "RejectLastChange":
-            if chat_id is None:
-                raise ValueError("chat_id is required for RejectLastChange subtool")
-                
-            # Get the current change_id from the approval state
-            # Use the imported function directly
-            change_id = get_current_change_id(chat_id)
-            if not change_id:
-                return "No pending change found to reject. Please make a change first."
-                
-            # Call the regular reject_change function with the retrieved change_id
-            result = await reject_change(change_id)
-            
-            # Clear the current change ID
-            clear_current_change_id(chat_id)
-            
-            return result
-            
-        if subtool == "SetCommitPrompt":
-            if chat_id is None:
-                raise ValueError("chat_id is required for SetCommitPrompt subtool")  # type: ignore
-                
-            # Use the set_commit_prompt function imported at the top of the file
-            
-            enabled_value = False
-            if "enabled" in provided_params:
-                # Handle both string and boolean inputs
-                if isinstance(provided_params["enabled"], str):
-                    enabled_value = provided_params["enabled"].lower() == "true"
-                else:
-                    enabled_value = bool(provided_params["enabled"])
-            
-            return set_commit_prompt(enabled_value)  # type: ignore
-            
+
+        # Removed ApproveChange, RejectChange, ListPendingChanges, ApproveLastChange, RejectLastChange, SetCommitPrompt
+
         if subtool == "CommitChanges":
             if chat_id is None:
                 raise ValueError("chat_id is required for CommitChanges subtool")
-                
+
             if description is None:
                 raise ValueError("description is required for CommitChanges subtool")
-                
+
             # Import what we need
             from .git_query import get_repository_root
-            from .git import commit_changes
-            
+            from .git_commit import perform_commit # Use the refactored commit function
+
             # Get the repository root
             repo_root = await get_repository_root(os.getcwd())
-            
+
             # Commit all staged changes
-            success, message = await commit_changes(
+            success, message = await perform_commit(
                 repo_root,
                 description,
                 chat_id,
                 commit_all=True,
             )
-            
+
             if success:
                 return f"Successfully committed changes: {message}"
             else:

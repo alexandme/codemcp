@@ -5,7 +5,6 @@ import stat
 from typing import Any, Literal
 
 from ..common import normalize_file_path
-from ..git import commit_changes
 from ..shell import run_command
 
 __all__ = [
@@ -17,8 +16,8 @@ __all__ = [
 
 TOOL_NAME_FOR_PROMPT = "Chmod"
 DESCRIPTION = """
-Changes file permissions using chmod. Unlike standard chmod, this tool only supports 
-a+x (add executable permission) and a-x (remove executable permission), because these 
+Changes file permissions using chmod. Unlike standard chmod, this tool only supports
+a+x (add executable permission) and a-x (remove executable permission), because these
 are the only bits that git knows how to track.
 
 Example:
@@ -88,29 +87,24 @@ async def chmod(
         check=True,
     )
 
-    # Prepare success message
-    if mode == "a+x":
-        description = f"Make '{os.path.basename(absolute_path)}' executable"
-        action_msg = f"Made file '{path}' executable"
-    else:
-        description = (
-            f"Remove executable permission from '{os.path.basename(absolute_path)}'"
-        )
-        action_msg = f"Removed executable permission from file '{path}'"
-
-    # Commit the changes
-    success, commit_message = await commit_changes(
-        directory,
-        description,
-        chat_id if chat_id is not None else "",
+    # Stage the change
+    await run_command(
+        ["git", "add", absolute_path],
+        cwd=directory,
+        check=True,
+        capture_output=True,
+        text=True,
     )
 
-    if not success:
-        raise RuntimeError(f"Failed to commit chmod changes: {commit_message}")
+    # Prepare success message
+    if mode == "a+x":
+        action_msg = f"Made file '{path}' executable"
+    else:
+        action_msg = f"Removed executable permission from file '{path}'"
 
     # Prepare output
     output = {
-        "output": f"{action_msg} and committed changes",
+        "output": f"{action_msg}. Changes staged. Use CommitChanges tool to commit.",
     }
 
     # Add formatted result for assistant

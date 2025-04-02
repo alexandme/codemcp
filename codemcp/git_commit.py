@@ -15,7 +15,7 @@ from .git_query import (
 )
 from .shell import run_command
 
-__all__ = ["commit_changes", "create_commit_reference"]
+__all__ = ["perform_commit", "create_commit_reference"]
 
 log = logging.getLogger(__name__)
 
@@ -154,24 +154,22 @@ async def create_commit_reference(
     )
 
 
-async def commit_changes(
+async def perform_commit(
     path: str,
     description: str,
     chat_id: str,
     commit_all: bool = False,
 ) -> tuple[bool, str]:
-    """Commit changes to a file, directory, or all files in Git.
+    """Commit staged changes in Git, potentially amending the HEAD commit.
 
-    This function is a slight misnomer, as we may not actually create a new
-    commit; we may merely amend the current commit.  The life cycle looks like this:
+    This function assumes changes are already staged. It handles the logic
+    for amending the current commit if it matches the `chat_id`, or creating
+    a new commit if necessary (e.g., if HEAD has a different `chat_id` or no
+    `chat_id`). It also handles cherry-picking the initial reference commit
+    created by `InitProject` if this is the first commit for a given `chat_id`.
 
-    1. On first write, when no commit exists: we'll cherry-pick that reference
-       first to create the initial commit and then proceed with the changes.
-
-    2. On later writes, we'll directly amend the existing commit.
-
-    If commit_all is True, all changes in the repository will be committed.
-    When commit_all is True, path can be None.
+    If `commit_all` is True, it attempts to stage all changes (`git add .`)
+    before committing. This is generally used by the `CommitChanges` tool.
 
     Args:
         path: The path to the file or directory to commit
@@ -184,7 +182,7 @@ async def commit_changes(
 
     """
     log.debug(
-        "commit_changes(%s, %s, %s, commit_all=%s)",
+        "perform_commit(%s, %s, %s, commit_all=%s)",
         path,
         description,
         chat_id,
@@ -197,10 +195,6 @@ async def commit_changes(
     # Get absolute paths for consistency
     abs_path = os.path.abspath(path)
 
-    # Get the directory - if path is a file, use its directory, otherwise use the path itself
-    directory = os.path.dirname(abs_path) if os.path.isfile(abs_path) else abs_path
-
-    # If it's a file, check if it exists (only if not commit_all mode)
     if not commit_all and os.path.isfile(abs_path) and not os.path.exists(abs_path):
         return False, f"File does not exist: {abs_path}"
 
@@ -208,7 +202,7 @@ async def commit_changes(
     from .git_query import get_repository_root
 
     git_cwd = await get_repository_root(directory)
-
+    directory = os.path.dirname(abs_path) if os.path.isfile(abs_path) else abs_path
     # Handle commit_all mode
     if commit_all:
         # Check if working directory has uncommitted changes
@@ -232,25 +226,6 @@ async def commit_changes(
         else:
             # No changes to commit
             return True, "No changes to commit"
-    else:
-        # Standard path-specific mode
-        # Add the path to git - could be a file or directory
-        try:
-            # If path is a directory, do git add .
-            add_command = ["git", "add", abs_path]
-
-            add_result = await run_command(
-                add_command,
-                cwd=git_cwd,
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-        except Exception as e:
-            return False, f"Failed to add to Git: {str(e)}"
-
-        if add_result.returncode != 0:
-            return False, f"Failed to add to Git: {add_result.stderr}"
 
     # Check if there are any changes to commit after git add
     diff_result = await run_command(
@@ -271,7 +246,7 @@ async def commit_changes(
     # Determine whether to amend or create a new commit
     head_chat_id = await get_head_commit_chat_id(git_cwd)
     logging.debug(
-        "commit_changes: head_chat_id = %s",
+        "perform_commit: head_chat_id = %s",
         head_chat_id,
     )
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 # This file re-exports functions from git_*.py modules for backward compatibility
+# NB: commit_changes is intentionally NOT exported here anymore. Use perform_commit.
 
 from .git_commit import commit_changes, create_commit_reference
 from .git_message import append_metadata_to_message
@@ -24,6 +25,6 @@ __all__ = [
     # From git_message.py
     "append_metadata_to_message",
     # From git_commit.py
-    "commit_changes",
+    "perform_commit", # Renamed from commit_changes
     "create_commit_reference",
 ]

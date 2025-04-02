@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, cast
 import tomli
 
 from .common import normalize_file_path, truncate_output_content
-from .git import commit_changes, get_repository_root, is_git_repository
+from .git import get_repository_root, is_git_repository
 from .shell import run_command
 
 __all__ = [
@@ -128,18 +128,7 @@ async def run_code_command(
         # Check if directory is in a git repository
         is_git_repo = await is_git_repository(full_dir_path)
 
-        # If it's a git repo, commit any pending changes before running the command
-        if is_git_repo:
-            logging.info(f"Committing any pending changes before {command_name}")
-            chat_id_str = str(chat_id) if chat_id is not None else ""
-            commit_result = await commit_changes(
-                full_dir_path,
-                f"Snapshot before auto-{command_name}",
-                chat_id_str,
-                commit_all=True,
-            )
-            if not commit_result[0]:
-                logging.warning(f"Failed to commit pending changes: {commit_result[1]}")
+
 
         # Run the command
         try:
@@ -156,25 +145,22 @@ async def run_code_command(
             # Truncate the output if needed, prioritizing the end content
             truncated_stdout = truncate_output_content(result.stdout, prefer_end=True)
 
-            # If it's a git repo, commit any changes made by the command
+            # If it's a git repo, stage any changes made by the command
             if is_git_repo:
                 has_changes = await check_for_changes(full_dir_path)
                 if has_changes:
-                    logging.info(f"Changes detected after {command_name}, committing")
-                    chat_id_str = str(chat_id) if chat_id is not None else ""
-                    success, commit_result_message = await commit_changes(
-                        full_dir_path, commit_message, chat_id_str, commit_all=True
+                    logging.info(f"Changes detected after {command_name}, staging")
+                    # Stage all changes in the repository
+                    await run_command(
+                        ["git", "add", "."],
+                        cwd=full_dir_path,
+                        check=True,
+                        capture_output=True,
+                        text=True,
                     )
+                    return f"Code {command_name} successful. Changes staged. Use CommitChanges tool to commit.\nOutput:\n{truncated_stdout}"
 
-                    if success:
-                        return f"Code {command_name} successful and changes committed:\n{truncated_stdout}"
-                    else:
-                        logging.warning(
-                            f"Failed to commit {command_name} changes: {commit_result_message}"
-                        )
-                        return f"Code {command_name} successful but failed to commit changes:\n{truncated_stdout}\nCommit error: {commit_result_message}"
-
-            return f"Code {command_name} successful:\n{truncated_stdout}"
+            return f"Code {command_name} successful (no changes detected):\n{truncated_stdout}"
         except subprocess.CalledProcessError as e:
             # Map the command_name to keep backward compatibility with existing tests
             command_key = command_name.title()

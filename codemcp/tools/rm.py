@@ -5,8 +5,8 @@ import os
 import pathlib
 
 from ..common import normalize_file_path
-from ..git import commit_changes, get_repository_root
-from ..shell import run_command
+from ..git import get_repository_root
+from ..shell import run_command # Keep run_command for git ls-files and git rm
 
 __all__ = [
     "rm_file",
@@ -81,16 +81,7 @@ async def rm_file(
         text=True,
     )
 
-    # Commit the changes
-    logging.info(f"Committing removal of file: {rel_path}")
-    success, commit_message = await commit_changes(
-        git_root_resolved,
-        f"Remove {rel_path}: {description}",
-        chat_id,
-        commit_all=False,  # No need for commit_all since git rm already stages the change
+    # Since git rm already stages the change, we just need to inform the user.
+    return (
+        f"Successfully removed file {rel_path}. Changes staged. Use CommitChanges tool to commit."
     )
-
-    if success:
-        return f"Successfully removed file {rel_path}."
-    else:
-        return f"File {rel_path} was removed but failed to commit: {commit_message}"
