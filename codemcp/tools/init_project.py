@@ -469,10 +469,56 @@ Example:
   chmod a+x path/to/file  # Makes a file executable by all users
   chmod a-x path/to/file  # Makes a file non-executable for all users
 
+## SetAutoEdit chat_id enable
+
+Enable or disable automatic application of file changes. When auto_edit is disabled (default),
+EditFile and WriteFile tools will show a diff preview with options for approval before applying changes.
+When enabled, changes will be applied immediately without requiring approval.
+
+Args:
+    enable: Boolean value to enable (true) or disable (false) auto_edit mode
+    chat_id: The unique ID to identify the chat session
+
+Example:
+  SetAutoEdit true   # Enable automatic application of changes
+  SetAutoEdit false  # Disable automatic application of changes (default)
+
+## ApplyChange chat_id path old_string new_string description
+
+Apply a previously proposed change to a file. This is called after EditFile when
+the user has reviewed and approved the change.
+
+Args:
+    path: The absolute path to the file to edit
+    old_string: The text to replace
+    new_string: The text to replace it with
+    description: Short description of the change
+    chat_id: The unique ID to identify the chat session
+
+## ApplyWrite chat_id path content description
+
+Apply a previously proposed write operation to a file. This is called after WriteFile
+when the user has reviewed and approved the change.
+
+Args:
+    path: The absolute path to the file to write
+    content: The content to write to the file
+    description: Short description of the change
+    chat_id: The unique ID to identify the chat session
+
+## CommitStagedChanges chat_id description
+
+Commit all staged changes to git. Use this to commit changes that have been approved
+and applied with ApplyChange or ApplyWrite.
+
+Args:
+    description: Commit message describing the changes
+    chat_id: The unique ID to identify the chat session
+
 ## Summary
 
 Args:
-    subtool: The subtool to execute (ReadFile, WriteFile, EditFile, LS, InitProject, UserPrompt, RunCommand, RM, Think, Chmod)
+    subtool: The subtool to execute (ReadFile, WriteFile, EditFile, LS, InitProject, UserPrompt, RunCommand, RM, Think, Chmod, SetAutoEdit, ApplyChange, ApplyWrite, CommitStagedChanges)
     path: The path to the file or directory to operate on
     content: Content for WriteFile subtool (any type will be serialized to string if needed)
     old_string: String to replace for EditFile subtool
@@ -484,6 +530,7 @@ Args:
     user_prompt: The user's verbatim text (for UserPrompt subtool)
     thought: The thought content (for Think subtool)
     mode: The chmod mode to apply (a+x or a-x) for Chmod subtool
+    enable: Boolean flag for SetAutoEdit tool
     chat_id: A unique ID to identify the chat session (required for all tools EXCEPT InitProject)
 
 # Chat ID

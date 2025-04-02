@@ -202,20 +202,3 @@ projects anyway.
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
-
-## Type Checking
-
-This project uses `pyright` for type checking with strict mode enabled. The type checking configuration is in `pyproject.toml`. We use a few strategies to maintain type safety:
-
-1. Type stubs for external libraries:
-   - Custom type stubs are in the `stubs/` directory
-   - The `stubPackages` configuration in `pyproject.toml` maps libraries to their stub packages
-
-2. File-specific ignores for challenging cases:
-   - For some files with complex dynamic typing patterns (particularly testing code), we use file-specific ignores via `tool.pyright.ignoreExtraErrors` in `pyproject.toml`
-   - This is preferable to inline ignores and lets us maintain type safety in most of the codebase
-
-When making changes, please ensure type checking passes by running:
-```
-./run_typecheck.sh
-```

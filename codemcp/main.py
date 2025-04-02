@@ -8,7 +8,12 @@ import click
 from mcp.server.fastmcp import FastMCP
 
 from .tools.chmod import chmod
-from .tools.edit_file import edit_file_content
+from .tools.edit_file import (
+    edit_file_content,
+    apply_change,
+    set_auto_edit,
+    commit_staged_changes,
+)
 from .tools.glob import MAX_RESULTS, glob_files
 from .tools.grep import grep_files
 from .tools.init_project import init_project
@@ -18,7 +23,7 @@ from .tools.rm import rm_file
 from .tools.run_command import run_command
 from .tools.think import think
 from .tools.user_prompt import user_prompt as user_prompt_tool
-from .tools.write_file import write_file_content
+from .tools.write_file import write_file_content, apply_write
 
 # Initialize FastMCP server
 mcp = FastMCP("codemcp")
@@ -49,6 +54,7 @@ async def codemcp(
     | None = None,  # Whether to reuse the chat ID from the HEAD commit
     thought: str | None = None,  # Added for Think tool
     mode: str | None = None,  # Added for Chmod tool
+    enable: bool | None = None,  # Added for SetAutoEdit tool
 ) -> str:
     """If and only if the user explicitly asks you to initialize codemcp with
     path, you should invoke this tool.  This will return instructions which you should
@@ -98,6 +104,19 @@ async def codemcp(
             "RM": {"path", "description", "chat_id"},
             "Think": {"thought", "chat_id"},
             "Chmod": {"path", "mode", "chat_id"},
+            # New tools for change approval workflow
+            "SetAutoEdit": {"enable", "chat_id"},
+            "ApplyChange": {
+                "path",
+                "old_string",
+                "new_string",
+                "description",
+                "old_str",
+                "new_str",
+                "chat_id",
+            },
+            "ApplyWrite": {"path", "content", "description", "chat_id"},
+            "CommitStagedChanges": {"description", "chat_id"},
         }
 
         # Check if subtool exists
@@ -152,6 +171,8 @@ async def codemcp(
                 "thought": thought,
                 # Chmod tool parameter
                 "mode": mode,
+                # SetAutoEdit tool parameter
+                "enable": enable,
             }.items()
             if value is not None
         }
@@ -345,6 +366,58 @@ async def codemcp(
             chmod_mode = cast(Literal["a+x", "a-x"], mode)
             result = await chmod(path, chmod_mode, chat_id)
             return result.get("resultForAssistant", "Chmod operation completed")
+            
+        if subtool == "SetAutoEdit":
+            enable = provided_params.get("enable")
+            if enable is None:
+                raise ValueError("enable is required for SetAutoEdit subtool")
+            
+            # Convert to boolean if string
+            if isinstance(enable, str):
+                enable_bool = enable.lower() == "true"
+            else:
+                enable_bool = bool(enable)
+                
+            return set_auto_edit(enable_bool)
+            
+        if subtool == "ApplyChange":
+            if path is None:
+                raise ValueError("path is required for ApplyChange subtool")
+            if description is None:
+                raise ValueError("description is required for ApplyChange subtool")
+            if old_string is None and old_str is None:
+                raise ValueError("Either old_string or old_str is required for ApplyChange subtool")
+                
+            # Accept either old_string or old_str (prefer old_string if both are provided)
+            old_content = old_string or old_str or ""
+            # Accept either new_string or new_str (prefer new_string if both are provided)
+            new_content = new_string or new_str or ""
+            
+            return await apply_change(
+                path, old_content, new_content, None, description, chat_id
+            )
+            
+        if subtool == "ApplyWrite":
+            if path is None:
+                raise ValueError("path is required for ApplyWrite subtool")
+            if description is None:
+                raise ValueError("description is required for ApplyWrite subtool")
+                
+            import json
+            
+            # If content is not a string, serialize it to a string using json.dumps
+            if content is not None and not isinstance(content, str):
+                content_str = json.dumps(content)
+            else:
+                content_str = content or ""
+                
+            return await apply_write(path, content_str, description, chat_id)
+            
+        if subtool == "CommitStagedChanges":
+            if description is None:
+                raise ValueError("description is required for CommitStagedChanges subtool")
+                
+            return await commit_staged_changes(description, chat_id)
     except Exception:
         logging.error("Exception", exc_info=True)
         raise
