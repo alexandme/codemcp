@@ -188,9 +188,3 @@ To run the server with inspector, use:
 PYTHONPATH=. mcp dev codemcp/__main__.py
 ```
 
-Logs are written to `~/.codemcp/codemcp.log`. The log level can be set in a global configuration file at `~/.codemcprc`:
-
-```toml
-[logger]
-verbosity = "INFO"  # Can be DEBUG, INFO, WARNING, ERROR, or CRITICAL
-```
