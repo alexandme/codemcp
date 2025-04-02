@@ -8,7 +8,7 @@ import anyio
 
 from .access import check_edit_permission
 from .async_file_utils import OpenTextMode
-from .git import commit_changes
+from .git import perform_commit
 from .line_endings import apply_line_endings, normalize_to_lf
 
 __all__ = [
@@ -96,7 +96,7 @@ async def check_git_tracking_for_existing_file(
             return False, error_msg
 
         # If there are other uncommitted changes, commit them
-        commit_success, commit_message = await commit_changes(
+        commit_success, commit_message = await perform_commit(
             file_path,
             description="Snapshot before codemcp change",
             chat_id=chat_id,

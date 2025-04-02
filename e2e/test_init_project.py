@@ -15,7 +15,7 @@ class InitProjectTest(MCPEndToEndTestCase):
         """Test that reuse_head_chat_id=True reuses the chat ID from the HEAD commit."""
         # Set up a git repository in the temp dir
         from codemcp.git import (
-            commit_changes,
+            perform_commit,
             get_head_commit_chat_id,
             get_ref_commit_chat_id,
         )
@@ -75,7 +75,7 @@ test = ["./run_test.sh"]
             with open(test_file, "a") as f:
                 f.write("\nAdded some content")
 
-            await commit_changes(
+            await perform_commit(
                 self.temp_dir.name,
                 description="Adding content",
                 chat_id=original_chat_id,
@@ -332,7 +332,7 @@ test = ["./run_test.sh"]
                 f.write("Test content for cherry-pick test")
 
             # Commit the changes - this should cherry-pick the reference commit first
-            success, message = await commit_changes(
+            success, message = await perform_commit(
                 path=self.temp_dir.name,
                 description="Testing cherry-pick",
                 chat_id=chat_id,

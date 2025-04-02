@@ -3,7 +3,7 @@
 # This file re-exports functions from git_*.py modules for backward compatibility
 # NB: commit_changes is intentionally NOT exported here anymore. Use perform_commit.
 
-from .git_commit import commit_changes, create_commit_reference
+from .git_commit import perform_commit, create_commit_reference
 from .git_message import append_metadata_to_message
 from .git_query import (
     get_head_commit_chat_id,

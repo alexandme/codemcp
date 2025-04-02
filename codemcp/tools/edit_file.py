@@ -15,7 +15,8 @@ from ..file_utils import (
     check_file_path_and_permissions,
     check_git_tracking_for_existing_file,
     write_text_content,
-) # Removed commit_changes import
+)
+from ..git import perform_commit
 from ..line_endings import detect_line_endings
 from ..shell import run_command # Import run_command for git add
 
@@ -679,7 +680,7 @@ async def edit_file_content(
         await write_text_content(full_file_path, new_string)
 
         # Commit the changes
-        success, message = await commit_changes(full_file_path, description, chat_id)
+        success, message = await perform_commit(full_file_path, description, chat_id)
         git_message = ""
         if success:
             git_message = f"\nChanges committed to git: {description}"
@@ -838,7 +839,7 @@ async def approve_change(change_id: str) -> str:
                 )
             else:
                 # Commit the change automatically
-                success, message = await commit_changes(
+                success, message = await perform_commit(
                     change_info["file_path"],
                     change_info["description"],
                     change_info["chat_id"]
@@ -876,7 +877,7 @@ async def approve_change(change_id: str) -> str:
                 )
             else:
                 # Commit the change automatically
-                success, message = await commit_changes(
+                success, message = await perform_commit(
                     change_info["file_path"],
                     change_info["description"],
                     change_info["chat_id"]
