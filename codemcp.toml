@@ -24,46 +24,27 @@ project_prompt = '''
     - Mention names of classes or methods which were added or changed
 - **Branch naming**: Name new branches with ticket code in the beginning, for example `NEW-145`, and then short title 4 words max
 
-## Change Approval and Commit Workflow
-CodeMCP now includes a multi-step workflow for code changes:
+## Commit Workflow
+CodeMCP uses a two-step commit workflow:
 
-1. Preview Step:
-   - EditFile/WriteFile tools operate in preview mode by default
-   - A diff of the proposed changes is shown
-   - You must explicitly approve or reject each change
+1. Apply & Stage Changes:
+   - Tools like EditFile, WriteFile, RM, Chmod, RunCommand will apply changes directly to the filesystem.
+   - These changes will be automatically staged using `git add`.
+   - The tool will respond with a success message indicating changes are staged.
 
-2. Approval Step:
-   - When user types "APPROVE" (all caps), you must call the ApproveLastChange tool
-   - When user types "REJECT" (all caps), you must call the RejectLastChange tool
-   - IMPORTANT: Do NOT use UserPrompt for these simple approve/reject messages!
-   - IMPORTANT: After approval, changes are only applied to files, NOT committed!
+2. Explicit Commit Step (User Initiated):
+   - IMPORTANT: Changes are NOT committed automatically.
+   - After changes are staged, STOP and wait for the user's next instruction.
+   - The user MUST explicitly type a `CommitChanges` command with a commit message.
+   - Only when the user issues this command should you call the `CommitChanges` tool.
 
-3. Commit Step (Required, Separate User Command):
-   - IMPORTANT: This step requires a new, explicit command from the user
-   - After approving changes, STOP and wait for user input
-   - Only when the user explicitly types a CommitChanges command should you proceed
-   - NEVER automatically run the CommitChanges tool after ApproveLastChange
-   - The user must manually type "CommitChanges" with a message
-
-4. Key Commands:
-   - APPROVE: User types this to approve changes (you call ApproveLastChange tool)
-   - REJECT: User types this to reject changes (you call RejectLastChange tool)
-   - CommitChanges: (Separate step) Commit applied changes with a message
-   - SetCommitPrompt: Enable/disable commit prompting
-   - ListPendingChanges: View all pending changes
-
-Example workflow (THREE separate user messages):
-```
-# 1. Claude proposes a change with a preview
-# 2. User reviews and types "APPROVE" 
-#    (You call ApproveLastChange, which applies changes to files ONLY)
-#    (Then STOP and wait for the next user input - do NOT proceed further!)
-# 3. User types "CommitChanges" with a message to commit
-#    (Only NOW do you call the CommitChanges tool)
-```
-
-CRITICAL: Do not proceed to step 3 automatically. Wait for explicit user input!
-NEVER chain ApproveLastChange and CommitChanges together in one response!
+Example workflow (TWO separate user messages):
+1. Claude applies and stages a change (e.g., using EditFile)
+(Claude responds: "Successfully edited file. Use CommitChanges tool to commit.")
+(Claude STOPS and waits for the next user input)
+2. User types: CommitChanges "Refactor function X"
+(Only NOW does Claude call the CommitChanges tool)
+CRITICAL: Do not proceed to the commit step automatically. Wait for explicit user input!
 
 - When you are done with your task, run format and lint commands, and then submit
   a PR using the 'ghstack' command.
