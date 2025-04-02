@@ -194,7 +194,3 @@ Logs are written to `~/.codemcp/codemcp.log`. The log level can be set in a glob
 [logger]
 verbosity = "INFO"  # Can be DEBUG, INFO, WARNING, ERROR, or CRITICAL
 ```
-
-Logging is not configurable on a per project basis, but this shouldn't matter
-much because it's difficult to use Claude Desktop in parallel on multiple
-projects anyway.
