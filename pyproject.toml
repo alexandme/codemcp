@@ -39,6 +39,24 @@ build-backend = "hatchling.build"
 [tool.uv]
 # uv-specific settings can go here
 
+[tool.black]
+# Black configuration
+line-length = 88
+target-version = ["py312"]
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.hg
+  | \.mypy_cache
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+)/
+'''
+
 [tool.ruff]
 # Enable the formatter
 target-version = "py312"
