@@ -23,11 +23,13 @@ class InitProjectNoCommitsTest(MCPEndToEndTestCase):
         # Create a simple codemcp.toml file
         toml_path = os.path.join(self.temp_dir.name, "codemcp.toml")
         with open(toml_path, "w") as f:
-            f.write("""
+            f.write(
+                """
 project_prompt = "Test project with no initial commit"
 [commands]
 test = ["./run_test.sh"]
-""")
+"""
+            )
 
         # Initialize git but don't make any commits
         await self.git_run(["init"])

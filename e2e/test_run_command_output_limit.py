@@ -21,24 +21,28 @@ class RunCommandOutputLimitTest(MCPEndToEndTestCase):
         # Create a script that generates a lot of output
         script_path = os.path.join(self.temp_dir.name, "generate_output.sh")
         with open(script_path, "w") as f:
-            f.write("""#!/bin/bash
+            f.write(
+                """#!/bin/bash
 # Generate a lot of output (more than MAX_LINES_TO_READ)
 for i in $(seq 1 2000); do
     echo "Line $i: This is a test line to verify output truncation"
 done
-""")
+"""
+            )
         os.chmod(script_path, 0o755)  # Make it executable
 
         # Create a codemcp.toml file
         config_path = os.path.join(self.temp_dir.name, "codemcp.toml")
         with open(config_path, "w") as f:
-            f.write("""
+            f.write(
+                """
 [project]
 name = "test-project"
 
 [commands]
 verbose = ["./generate_output.sh"]
-""")
+"""
+            )
 
         # Add files to git
         await self.git_run(["add", "."])

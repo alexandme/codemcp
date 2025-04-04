@@ -89,14 +89,16 @@ class TestCursorRulesE2E(MCPEndToEndTestCase):
         os.makedirs(nested_dir, exist_ok=True)
 
         with open(nested_dir / "tsx_rule.mdc", "w") as f:
-            f.write("""---
+            f.write(
+                """---
 description: TypeScript JSX Rule
 globs: *.tsx, **/*.tsx
 alwaysApply: false
 ---
 ## TypeScript JSX Guidelines
 
-Use interfaces for props.""")
+Use interfaces for props."""
+            )
 
         # Add all files to git so they're tracked
         await self.git_run(["add", "."])
@@ -108,12 +110,14 @@ Use interfaces for props.""")
         always_apply_str = "true" if always_apply else "false"
 
         with open(self.rules_dir / file_name, "w") as f:
-            f.write(f"""---
+            f.write(
+                f"""---
 description: {description}
 globs: {globs_str}
 alwaysApply: {always_apply_str}
 ---
-{content}""")
+{content}"""
+            )
 
     async def test_match_file_with_glob_patterns(self):
         """Test various glob patterns with the match_file_with_glob function"""

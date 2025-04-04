@@ -21,7 +21,8 @@ class RunCommandTestTest(MCPEndToEndTestCase):
         # Create a test.py file with a simple test
         test_file_path = os.path.join(test_dir, "test_simple.py")
         with open(test_file_path, "w") as f:
-            f.write("""
+            f.write(
+                """
 import unittest
 
 class SimpleTestCase(unittest.TestCase):
@@ -30,18 +31,21 @@ class SimpleTestCase(unittest.TestCase):
 
     def test_another_success(self):
         self.assertTrue(True)
-""")
+"""
+            )
 
         # Create a second test file with another test
         test_file_path2 = os.path.join(test_dir, "test_another.py")
         with open(test_file_path2, "w") as f:
-            f.write("""
+            f.write(
+                """
 import unittest
 
 class AnotherTestCase(unittest.TestCase):
     def test_success(self):
         self.assertEqual(2 + 2, 4)
-""")
+"""
+            )
 
         # Create a run_test.sh script to mimic the real one
         # Get the current Python executable path
@@ -50,23 +54,27 @@ class AnotherTestCase(unittest.TestCase):
         # Create run_test.sh script using the current Python executable
         runner_script_path = os.path.join(self.temp_dir.name, "run_test.sh")
         with open(runner_script_path, "w") as f:
-            f.write(f"""#!/bin/bash
+            f.write(
+                f"""#!/bin/bash
 set -e
 cd "$(dirname "$0")"
 {current_python} -m pytest $@
-""")
+"""
+            )
         os.chmod(runner_script_path, 0o755)  # Make it executable
 
         # Update codemcp.toml to include the test subtool
         config_path = os.path.join(self.temp_dir.name, "codemcp.toml")
         with open(config_path, "w") as f:
-            f.write("""
+            f.write(
+                """
 [project]
 name = "test-project"
 
 [commands]
 test = ["./run_test.sh"]
-""")
+"""
+            )
 
         # Add files to git
         await self.git_run(["add", "."])
@@ -134,7 +142,8 @@ test = ["./run_test.sh"]
         # Create a test.py file with a simple test
         test_file_path = os.path.join(test_dir, "test_simple.py")
         with open(test_file_path, "w") as f:
-            f.write("""
+            f.write(
+                """
 import unittest
 
 class SimpleTestCase(unittest.TestCase):
@@ -143,18 +152,21 @@ class SimpleTestCase(unittest.TestCase):
 
     def test_another_success(self):
         self.assertTrue(True)
-""")
+"""
+            )
 
         # Create a second test file with another test
         test_file_path2 = os.path.join(test_dir, "test_another.py")
         with open(test_file_path2, "w") as f:
-            f.write("""
+            f.write(
+                """
 import unittest
 
 class AnotherTestCase(unittest.TestCase):
     def test_success(self):
         self.assertEqual(2 + 2, 4)
-""")
+"""
+            )
 
         # Get the current Python executable path
         current_python = os.path.abspath(sys.executable)
@@ -162,23 +174,27 @@ class AnotherTestCase(unittest.TestCase):
         # Create run_test.sh script using the current Python executable
         runner_script_path = os.path.join(self.temp_dir.name, "run_test.sh")
         with open(runner_script_path, "w") as f:
-            f.write(f"""#!/bin/bash
+            f.write(
+                f"""#!/bin/bash
 set -e
 cd "$(dirname "$0")"
 {current_python} -m pytest $@
-""")
+"""
+            )
         os.chmod(runner_script_path, 0o755)  # Make it executable
 
         # Update codemcp.toml to include the test subtool
         config_path = os.path.join(self.temp_dir.name, "codemcp.toml")
         with open(config_path, "w") as f:
-            f.write("""
+            f.write(
+                """
 [project]
 name = "test-project"
 
 [commands]
 test = ["./run_test.sh"]
-""")
+"""
+            )
 
         # Add files to git
         await self.git_run(["add", "."])

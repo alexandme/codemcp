@@ -506,27 +506,33 @@ indent_size = 2
 
             # Create root .editorconfig with default LF
             with open(project_dir / ".editorconfig", "w") as f:
-                f.write("""
+                f.write(
+                    """
 root = true
 
 [*]
 end_of_line = lf
-                """)
+                """
+                )
 
             # Create frontend .editorconfig with CRLF
             with open(frontend_dir / ".editorconfig", "w") as f:
-                f.write("""
+                f.write(
+                    """
 root = false
 
 [*]
 end_of_line = crlf
-                """)
+                """
+                )
 
             # Create backend .gitattributes with explicit LF
             with open(backend_dir / ".gitattributes", "w") as f:
-                f.write("""
+                f.write(
+                    """
 *.py text eol=lf
-                """)
+                """
+                )
 
             # Test that each file gets the right setting from the nearest config
             result = check_editorconfig(str(root_file))
@@ -564,10 +570,12 @@ end_of_line = crlf
 
             # Create a codemcp.toml in the root directory with explicit CRLF
             with open(project_dir / "codemcp.toml", "w") as f:
-                f.write("""
+                f.write(
+                    """
 [files]
 line_endings = "CRLF"
-                """)
+                """
+                )
 
             # Test .editorconfig still takes precedence
             result = get_line_ending_preference(str(root_file))

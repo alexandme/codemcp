@@ -23,11 +23,13 @@ class InitProjectTest(MCPEndToEndTestCase):
         # Create a simple codemcp.toml file
         toml_path = os.path.join(self.temp_dir.name, "codemcp.toml")
         with open(toml_path, "w") as f:
-            f.write("""
+            f.write(
+                """
 project_prompt = "Test reuse chat ID"
 [commands]
 test = ["./run_test.sh"]
-""")
+"""
+            )
 
         # Set up a git repository
         await self.git_run(["init"])
@@ -136,7 +138,8 @@ test = ["./run_test.sh"]
         # Create a more complex codemcp.toml file with various data types
         complex_toml_path = os.path.join(self.temp_dir.name, "codemcp.toml")
         with open(complex_toml_path, "w") as f:
-            f.write("""# Complex TOML file with various data types
+            f.write(
+                """# Complex TOML file with various data types
 project_prompt = \"\"\"
 This is a multiline string
 with multiple lines
@@ -150,7 +153,8 @@ lint = ["./run_lint.sh"]
 [commands.test]
 command = ["./run_test.sh"]
 doc = "Run tests with optional arguments"
-""")
+"""
+            )
 
         async with self.create_client_session() as session:
             # Call the InitProject tool with our new helper method
@@ -177,11 +181,13 @@ doc = "Run tests with optional arguments"
         # Create a TOML file with non-ASCII characters and binary data
         binary_toml_path = os.path.join(self.temp_dir.name, "codemcp.toml")
         with open(binary_toml_path, "wb") as f:
-            f.write(b"""project_prompt = "Testing binary data handling \xc2\xa9\xe2\x84\xa2\xf0\x9f\x98\x8a"
+            f.write(
+                b"""project_prompt = "Testing binary data handling \xc2\xa9\xe2\x84\xa2\xf0\x9f\x98\x8a"
 
 [commands]
 format = ["./run_format.sh"]
-""")
+"""
+            )
 
         async with self.create_client_session() as session:
             # Call the InitProject tool with our new helper method
@@ -205,11 +211,13 @@ format = ["./run_format.sh"]
         # Create a simple codemcp.toml file
         toml_path = os.path.join(self.temp_dir.name, "codemcp.toml")
         with open(toml_path, "w") as f:
-            f.write("""
+            f.write(
+                """
 project_prompt = "Test project"
 [commands]
 test = ["./run_test.sh"]
-""")
+"""
+            )
 
         # Set up a git repository
         from codemcp.git import get_head_commit_hash, get_ref_commit_chat_id

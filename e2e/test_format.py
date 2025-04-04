@@ -35,7 +35,8 @@ class RunCommandFormatTest(MCPEndToEndTestCase):
         # Create a simple format script that simulates ruff formatting
         format_script_path = os.path.join(self.temp_dir.name, "run_format.sh")
         with open(format_script_path, "w") as f:
-            f.write("""#!/bin/bash
+            f.write(
+                """#!/bin/bash
 # Simple mock formatter that just fixes the format of the unformatted.py file
 if [ -f unformatted.py ]; then
     # Replace with properly formatted version
@@ -47,7 +48,8 @@ def badly_formatted_function(arg1, arg2):
 EOF
     echo "Formatted unformatted.py"
 fi
-""")
+"""
+            )
 
         # Make it executable
         os.chmod(format_script_path, 0o755)
@@ -55,12 +57,14 @@ fi
         # Create a codemcp.toml file with format subtool
         codemcp_toml_path = os.path.join(self.temp_dir.name, "codemcp.toml")
         with open(codemcp_toml_path, "w") as f:
-            f.write("""[project]
+            f.write(
+                """[project]
 name = "test-project"
 
 [commands]
 format = ["./run_format.sh"]
-""")
+"""
+            )
 
         # Record the current commit hash before formatting
         commit_before = await self.git_run(

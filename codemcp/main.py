@@ -45,8 +45,9 @@ async def codemcp(
     chat_id: str | None = None,  # Added for chat identification
     user_prompt: str | None = None,  # Added for InitProject commit message
     subject_line: str | None = None,  # Added for InitProject commit message
-    reuse_head_chat_id: bool
-    | None = None,  # Whether to reuse the chat ID from the HEAD commit
+    reuse_head_chat_id: (
+        bool | None
+    ) = None,  # Whether to reuse the chat ID from the HEAD commit
     thought: str | None = None,  # Added for Think tool
     mode: str | None = None,  # Added for Chmod tool
 ) -> str:

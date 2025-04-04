@@ -43,7 +43,8 @@ def main():
         # Create a simple lint script that simulates ruff linting
         lint_script_path = os.path.join(self.temp_dir.name, "run_lint.sh")
         with open(lint_script_path, "w") as f:
-            f.write("""#!/bin/bash
+            f.write(
+                """#!/bin/bash
 # Simple mock linter that fixes linting issues in the unlinted.py file
 if [ -f unlinted.py ]; then
     # Replace with properly linted version (removed unused imports and variables)
@@ -60,7 +61,8 @@ def main():
 EOF
     echo "Linted unlinted.py"
 fi
-""")
+"""
+            )
 
         # Make it executable
         os.chmod(lint_script_path, 0o755)
@@ -68,12 +70,14 @@ fi
         # Create a codemcp.toml file with lint subtool
         codemcp_toml_path = os.path.join(self.temp_dir.name, "codemcp.toml")
         with open(codemcp_toml_path, "w") as f:
-            f.write("""[project]
+            f.write(
+                """[project]
 name = "test-project"
 
 [commands]
 lint = ["./run_lint.sh"]
-""")
+"""
+            )
 
         # Record the current commit hash before linting
         commit_before = await self.git_run(
