@@ -1,0 +1,8 @@
+# codemcp configuration file for __PROJECT_NAME__
+
+ruff_format = ["ruff", "format"]
+# TODO: I don't think this is right, need to read the manual,
+# need to be a lot more opinionated about lints here
+ruff_check = ["ruff", "check", "--fix"]
+pyright = ["uv", "run", "pyright"]
+pytest = ["uv", "run", "pytest"]

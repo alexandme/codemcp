@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 
-from codemcp.glob import match as glob_match
+from codemcp.glob_pattern import match as glob_match
 
 __all__ = [
     "Rule",

@@ -2,11 +2,20 @@
 
 import logging
 import os
+import re
 from pathlib import Path
+from typing import List, Optional, Tuple
 
 import click
+import pathspec
+import uvicorn
+from fastapi.middleware.cors import CORSMiddleware
 from mcp.server.fastmcp import FastMCP
+from starlette.applications import Starlette
+from starlette.routing import Mount
 
+from .common import normalize_file_path
+from .git_query import get_current_commit_hash
 from .tools.chmod import chmod
 from .tools.edit_file import edit_file_content
 from .tools.glob import MAX_RESULTS, glob_files
@@ -24,13 +33,44 @@ from .tools.write_file import write_file_content
 mcp = FastMCP("codemcp")
 
 
+# Helper function to get the current commit hash and append it to a result string
+async def append_commit_hash(result: str, path: str | None) -> Tuple[str, str | None]:
+    """Get the current Git commit hash and append it to the result string.
+
+    Args:
+        result: The original result string to append to
+        path: Path to the Git repository (if available)
+
+    Returns:
+        A tuple containing:
+            - The result string with the commit hash appended
+            - The current commit hash if available, None otherwise
+    """
+    current_hash = None
+
+    if path is None:
+        return result, None
+
+    try:
+        current_hash = await get_current_commit_hash(path)
+        if current_hash:
+            return f"{result}\n\nCurrent commit hash: {current_hash}", current_hash
+    except Exception as e:
+        logging.warning(f"Failed to get current commit hash: {e}", exc_info=True)
+
+    return result, current_hash
+
+
 # NB: If you edit this, also edit codemcp/tools/init_project.py
 @mcp.tool()
 async def codemcp(
     subtool: str,
     *,
     path: str | None = None,
-    content: object = None,  # Allow any type, will be serialized to string if needed
+    content: str
+    | dict
+    | list
+    | None = None,  # Allow any type, will be serialized to string if needed
     old_string: str | None = None,
     new_string: str | None = None,
     offset: int | None = None,
@@ -40,8 +80,8 @@ async def codemcp(
     include: str | None = None,
     command: str | None = None,
     arguments: str | None = None,
-    old_str: str | None = None,  # Added for backward compatibility
-    new_str: str | None = None,  # Added for backward compatibility
+    old_str: str | None = None,  # Added because Claude often hallucinates this
+    new_str: str | None = None,  # Added because Claude often hallucinates this
     chat_id: str | None = None,  # Added for chat identification
     user_prompt: str | None = None,  # Added for InitProject commit message
     subject_line: str | None = None,  # Added for InitProject commit message
@@ -50,32 +90,37 @@ async def codemcp(
     ) = None,  # Whether to reuse the chat ID from the HEAD commit
     thought: str | None = None,  # Added for Think tool
     mode: str | None = None,  # Added for Chmod tool
+    commit_hash: str | None = None,  # Added for Git commit hash tracking
 ) -> str:
+    # NOTE: Do NOT add more documentation to this docblock when you add a new
+    # tool, documentation for tools should go in codemcp/tools/init_project.py.
+    # This includes documentation for new parameters!  ONLY InitProject's
+    # parmaeters are documented here.
     """If and only if the user explicitly asks you to initialize codemcp with
     path, you should invoke this tool.  This will return instructions which you should
-    IMMEDIATELY follow before continuing.
+    IMMEDIATELY follow before continuing, in particular, it will explain other ways
+    you can invoke this tool.
 
     If the user indicates they want to "amend" or "continue working" on a PR,
     you should set reuse_head_chat_id=True to continue using the same chat ID.
 
-    In each response after the first one, you must call the UserPrompt tool
-    with the user's verbatim message text.
+    In each subsequent request NOT including the initial request to initialize
+    codemcp, you must call the UserPrompt tool with the user's verbatim
+    request text.
 
     Arguments:
-      subtool: The subtool to run (InitProject, UserPrompt, Think, ...)
+      subtool: The subtool to run (InitProject, ...)
       path: The path to the file or directory to operate on
-      chat_id: A unique ID to identify the chat session (provided by InitProject and required for all tools EXCEPT InitProject)
       user_prompt: The user's original prompt verbatim, starting AFTER instructions to initialize codemcp (e.g., you should exclude "Initialize codemcp for PATH")
       subject_line: A short subject line in Git conventional commit format (for InitProject)
       reuse_head_chat_id: If True, reuse the chat ID from the HEAD commit instead of generating a new one (for InitProject)
-      thought: The thought content for the Think tool (used for complex reasoning or cache memory)
-      ... (there are other arguments which are documented later)
+      ... (there are other arguments which will be documented when you InitProject)
     """
     try:
         # Define expected parameters for each subtool
         expected_params = {
-            "ReadFile": {"path", "offset", "limit", "chat_id"},
-            "WriteFile": {"path", "content", "description", "chat_id"},
+            "ReadFile": {"path", "offset", "limit", "chat_id", "commit_hash"},
+            "WriteFile": {"path", "content", "description", "chat_id", "commit_hash"},
             "EditFile": {
                 "path",
                 "old_string",
@@ -84,21 +129,22 @@ async def codemcp(
                 "old_str",
                 "new_str",
                 "chat_id",
+                "commit_hash",
             },
-            "LS": {"path", "chat_id"},
+            "LS": {"path", "chat_id", "commit_hash"},
             "InitProject": {
                 "path",
                 "user_prompt",
                 "subject_line",
                 "reuse_head_chat_id",
             },  # chat_id is not expected for InitProject as it's generated there
-            "UserPrompt": {"user_prompt", "chat_id"},
-            "RunCommand": {"path", "command", "arguments", "chat_id"},
-            "Grep": {"pattern", "path", "include", "chat_id"},
-            "Glob": {"pattern", "path", "limit", "offset", "chat_id"},
-            "RM": {"path", "description", "chat_id"},
-            "Think": {"thought", "chat_id"},
-            "Chmod": {"path", "mode", "chat_id"},
+            "UserPrompt": {"user_prompt", "chat_id", "commit_hash"},
+            "RunCommand": {"path", "command", "arguments", "chat_id", "commit_hash"},
+            "Grep": {"pattern", "path", "include", "chat_id", "commit_hash"},
+            "Glob": {"pattern", "path", "limit", "offset", "chat_id", "commit_hash"},
+            "RM": {"path", "description", "chat_id", "commit_hash"},
+            "Think": {"thought", "chat_id", "commit_hash"},
+            "Chmod": {"path", "mode", "chat_id", "commit_hash"},
         }
 
         # Check if subtool exists
@@ -153,6 +199,8 @@ async def codemcp(
                 "thought": thought,
                 # Chmod tool parameter
                 "mode": mode,
+                # Git commit hash tracking
+                "commit_hash": commit_hash,
             }.items()
             if value is not None
         }
@@ -173,13 +221,21 @@ async def codemcp(
             if path is None:
                 raise ValueError("path is required for ReadFile subtool")
 
-            return await read_file_content(path, offset, limit, chat_id)
+            # Normalize the path (expand tilde) before proceeding
+            normalized_path = normalize_file_path(path)
+
+            result = await read_file_content(normalized_path, offset, limit, chat_id)
+            result, new_commit_hash = await append_commit_hash(result, normalized_path)
+            return result
 
         if subtool == "WriteFile":
             if path is None:
                 raise ValueError("path is required for WriteFile subtool")
             if description is None:
                 raise ValueError("description is required for WriteFile subtool")
+
+            # Normalize the path (expand tilde) before proceeding
+            normalized_path = normalize_file_path(path)
 
             import json
 
@@ -191,7 +247,11 @@ async def codemcp(
 
             if chat_id is None:
                 raise ValueError("chat_id is required for WriteFile subtool")
-            return await write_file_content(path, content_str, description, chat_id)
+            result = await write_file_content(
+                normalized_path, content_str, description, chat_id
+            )
+            result, new_commit_hash = await append_commit_hash(result, normalized_path)
+            return result
 
         if subtool == "EditFile":
             if path is None:
@@ -204,21 +264,31 @@ async def codemcp(
                     "Either old_string or old_str is required for EditFile subtool (use empty string for new file creation)"
                 )
 
+            # Normalize the path (expand tilde) before proceeding
+            normalized_path = normalize_file_path(path)
+
             # Accept either old_string or old_str (prefer old_string if both are provided)
             old_content = old_string or old_str or ""
             # Accept either new_string or new_str (prefer new_string if both are provided)
             new_content = new_string or new_str or ""
             if chat_id is None:
                 raise ValueError("chat_id is required for EditFile subtool")
-            return await edit_file_content(
-                path, old_content, new_content, None, description, chat_id
+            result = await edit_file_content(
+                normalized_path, old_content, new_content, None, description, chat_id
             )
+            result, new_commit_hash = await append_commit_hash(result, normalized_path)
+            return result
 
         if subtool == "LS":
             if path is None:
                 raise ValueError("path is required for LS subtool")
 
-            return await ls_directory(path, chat_id)
+            # Normalize the path (expand tilde) before proceeding
+            normalized_path = normalize_file_path(path)
+
+            result = await ls_directory(normalized_path, chat_id)
+            result, new_commit_hash = await append_commit_hash(result, normalized_path)
+            return result
 
         if subtool == "InitProject":
             if path is None:
@@ -232,8 +302,11 @@ async def codemcp(
                     False  # Default value in main.py only, not in the implementation
                 )
 
+            # Normalize the path (expand tilde) before proceeding
+            normalized_path = normalize_file_path(path)
+
             return await init_project(
-                path, user_prompt, subject_line, reuse_head_chat_id
+                normalized_path, user_prompt, subject_line, reuse_head_chat_id
             )
 
         if subtool == "RunCommand":
@@ -247,6 +320,9 @@ async def codemcp(
             if command is None:
                 raise ValueError("command is required for RunCommand subtool")
 
+            # Normalize the path (expand tilde) before proceeding
+            normalized_path = normalize_file_path(path)
+
             # Ensure chat_id is provided
             if chat_id is None:
                 raise ValueError("chat_id is required for RunCommand subtool")
@@ -257,12 +333,14 @@ async def codemcp(
                 if isinstance(arguments, str) or arguments is None
                 else " ".join(arguments)
             )
-            return await run_command(
-                path,
+            result = await run_command(
+                normalized_path,
                 command,
                 args_str,
                 chat_id,
             )
+            result, new_commit_hash = await append_commit_hash(result, normalized_path)
+            return result
 
         if subtool == "Grep":
             if pattern is None:
@@ -271,12 +349,21 @@ async def codemcp(
             if path is None:
                 raise ValueError("path is required for Grep subtool")
 
+            # Normalize the path (expand tilde) before proceeding
+            normalized_path = normalize_file_path(path)
+
             try:
-                result = await grep_files(pattern, path, include, chat_id)
-                return result.get(
-                    "resultForAssistant",
-                    f"Found {result.get('numFiles', 0)} file(s)",
+                grep_result = await grep_files(
+                    pattern, normalized_path, include, chat_id
                 )
+                result_string = grep_result.get(
+                    "resultForAssistant",
+                    f"Found {grep_result.get('numFiles', 0)} file(s)",
+                )
+                result, new_commit_hash = await append_commit_hash(
+                    result_string, normalized_path
+                )
+                return result
             except Exception as e:
                 # Log the error but don't suppress it - let it propagate
                 logging.error(f"Exception in grep subtool: {e!s}", exc_info=True)
@@ -289,18 +376,25 @@ async def codemcp(
             if path is None:
                 raise ValueError("path is required for Glob subtool")
 
+            # Normalize the path (expand tilde) before proceeding
+            normalized_path = normalize_file_path(path)
+
             try:
-                result = await glob_files(
+                glob_result = await glob_files(
                     pattern,
-                    path,
+                    normalized_path,
                     limit=limit if limit is not None else MAX_RESULTS,
                     offset=offset if offset is not None else 0,
                     chat_id=chat_id,
                 )
-                return result.get(
+                result_string = glob_result.get(
                     "resultForAssistant",
-                    f"Found {result.get('numFiles', 0)} file(s)",
+                    f"Found {glob_result.get('numFiles', 0)} file(s)",
                 )
+                result, new_commit_hash = await append_commit_hash(
+                    result_string, normalized_path
+                )
+                return result
             except Exception as e:
                 # Log the error but don't suppress it - let it propagate
                 logging.error(f"Exception in glob subtool: {e!s}", exc_info=True)
@@ -310,7 +404,14 @@ async def codemcp(
             if user_prompt is None:
                 raise ValueError("user_prompt is required for UserPrompt subtool")
 
-            return await user_prompt_tool(user_prompt, chat_id)
+            result = await user_prompt_tool(user_prompt, chat_id)
+            # UserPrompt doesn't need a path, but we might have one in the provided parameters
+            if path:
+                normalized_path = normalize_file_path(path)
+                result, new_commit_hash = await append_commit_hash(
+                    result, normalized_path
+                )
+            return result
 
         if subtool == "RM":
             if path is None:
@@ -318,21 +419,36 @@ async def codemcp(
             if description is None:
                 raise ValueError("description is required for RM subtool")
 
+            # Normalize the path (expand tilde) before proceeding
+            normalized_path = normalize_file_path(path)
+
             if chat_id is None:
                 raise ValueError("chat_id is required for RM subtool")
-            return await rm_file(path, description, chat_id)
+            result = await rm_file(normalized_path, description, chat_id)
+            result, new_commit_hash = await append_commit_hash(result, normalized_path)
+            return result
 
         if subtool == "Think":
             if thought is None:
                 raise ValueError("thought is required for Think subtool")
 
-            return await think(thought, chat_id)
+            result = await think(thought, chat_id)
+            # Think doesn't need a path, but we might have one in the provided parameters
+            if path:
+                normalized_path = normalize_file_path(path)
+                result, new_commit_hash = await append_commit_hash(
+                    result, normalized_path
+                )
+            return result
 
         if subtool == "Chmod":
             if path is None:
                 raise ValueError("path is required for Chmod subtool")
             if mode is None:
                 raise ValueError("mode is required for Chmod subtool")
+
+            # Normalize the path (expand tilde) before proceeding
+            normalized_path = normalize_file_path(path)
 
             if chat_id is None:
                 raise ValueError("chat_id is required for Chmod subtool")
@@ -344,14 +460,92 @@ async def codemcp(
             from typing import Literal, cast
 
             chmod_mode = cast(Literal["a+x", "a-x"], mode)
-            result = await chmod(path, chmod_mode, chat_id)
-            return result.get("resultForAssistant", "Chmod operation completed")
+            chmod_result = await chmod(normalized_path, chmod_mode, chat_id)
+            result_string = chmod_result.get(
+                "resultForAssistant", "Chmod operation completed"
+            )
+            result, new_commit_hash = await append_commit_hash(
+                result_string, normalized_path
+            )
+            return result
     except Exception:
         logging.error("Exception", exc_info=True)
         raise
 
     # This should never be reached, but adding for type safety
     return "Unknown subtool or operation"
+
+
+def get_files_respecting_gitignore(dir_path: Path, pattern: str = "**/*") -> List[Path]:
+    """Get files in a directory respecting .gitignore rules in all subdirectories.
+
+    Args:
+        dir_path: The directory path to search in
+        pattern: The glob pattern to match files against (default: "**/*")
+
+    Returns:
+        A list of Path objects for files that match the pattern and respect .gitignore
+    """
+    # First collect all files and directories
+    all_paths = list(dir_path.glob(pattern))
+    all_files = [p for p in all_paths if p.is_file()]
+    all_dirs = [dir_path] + [p for p in all_paths if p.is_dir()]
+
+    # Find all .gitignore files in the directory and subdirectories
+    gitignore_specs = {}
+
+    # Process .gitignore files from root to leaf directories
+    for directory in sorted(all_dirs, key=lambda d: str(d)):
+        gitignore_path = directory / ".gitignore"
+        if gitignore_path.exists() and gitignore_path.is_file():
+            try:
+                with open(gitignore_path, "r") as ignore_file:
+                    ignore_lines = ignore_file.readlines()
+                    gitignore_specs[directory] = pathspec.GitIgnoreSpec.from_lines(
+                        ignore_lines
+                    )
+            except Exception as e:
+                # Log error but continue processing
+                logging.warning(f"Error reading .gitignore in {directory}: {e}")
+
+    # If no .gitignore files found, return all files
+    if not gitignore_specs:
+        return [f for f in all_files if f.is_file()]
+
+    # Helper function to check if a path is ignored by any relevant .gitignore
+    def is_ignored(path: Path) -> bool:
+        """
+        Check if a path should be ignored according to .gitignore rules.
+
+        This checks the path against all .gitignore files in its parent directories.
+        """
+        # For files, we need to check if any parent directory is ignored first
+        if path.is_file():
+            # Check if any parent directory is ignored
+            current_dir = path.parent
+            while current_dir.is_relative_to(dir_path):
+                if is_ignored(current_dir):
+                    return True
+                current_dir = current_dir.parent
+
+        # Now check the path against all relevant .gitignore specs
+        for spec_dir, spec in gitignore_specs.items():
+            # Only apply specs from parent directories of the path
+            if path.is_relative_to(spec_dir):
+                # Get the path relative to the directory containing the .gitignore
+                rel_path = str(path.relative_to(spec_dir))
+                # Empty string means the directory itself
+                if not rel_path:
+                    rel_path = "."
+                # Check if path matches any pattern in the .gitignore
+                if spec.match_file(rel_path):
+                    return True
+
+        return False
+
+    # Filter out ignored files
+    result = [f for f in all_files if not is_ignored(f)]
+    return result
 
 
 def configure_logging(log_file: str = "codemcp.log") -> None:
@@ -438,72 +632,138 @@ def configure_logging(log_file: str = "codemcp.log") -> None:
         logging.info("Logs from 'mcp' module are being filtered")
 
 
-def init_codemcp_project(path: str) -> str:
+def init_codemcp_project(path: str, python: bool = False) -> str:
     """Initialize a new codemcp project.
 
     Args:
         path: Path to initialize the project in
+        python: Whether to create Python project files
 
     Returns:
         Message indicating success or failure
     """
     import subprocess
 
+    # Convert to Path object and resolve to absolute path
+    project_path = Path(path).resolve()
+
+    # Create directory if it doesn't exist
+    project_path.mkdir(parents=True, exist_ok=True)
+
+    # Check if git repository already exists
+    git_dir = project_path / ".git"
+    if not git_dir.exists():
+        # Initialize git repository
+        subprocess.run(["git", "init"], cwd=project_path, check=True)
+        print(f"Initialized git repository in {project_path}")
+    else:
+        print(f"Git repository already exists in {project_path}")
+
+    # Select the appropriate template directory
+    template_name = "python" if python else "blank"
+    templates_dir = Path(__file__).parent / "templates" / template_name
+
+    # Derive project name from directory name (for replacing placeholders)
+    project_name = project_path.name
+    package_name = re.sub(r"[^a-z0-9_]", "_", project_name.lower())
+
+    # Create a mapping for placeholder replacements
+    replacements = {
+        "__PROJECT_NAME__": project_name,
+        "__PACKAGE_NAME__": package_name,
+    }
+
+    # Track which files we need to add to git
+    files_to_add = []
+
+    # Function to replace placeholders in a string
+    def replace_placeholders(text):
+        for placeholder, value in replacements.items():
+            text = text.replace(placeholder, value)
+        return text
+
+    # Function to process a file from template directory to output directory
+    def process_file(template_file, template_root, output_root):
+        # Get the relative path from template root
+        rel_path = template_file.relative_to(template_root)
+
+        # Replace placeholders in the path components
+        path_parts = []
+        for part in rel_path.parts:
+            path_parts.append(replace_placeholders(part))
+
+        # Create the output path with replaced placeholders
+        output_path = output_root.joinpath(*path_parts)
+
+        # Create parent directories if they don't exist
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Skip if the file already exists
+        if output_path.exists():
+            print(f"File already exists, skipping: {output_path}")
+            return None
+
+        # Read the template content
+        with open(template_file, "r") as f:
+            content = f.read()
+
+        # Replace placeholders in content
+        content = replace_placeholders(content)
+
+        # Write to the output file
+        with open(output_path, "w") as f:
+            f.write(content)
+
+        # Return the relative path for git tracking
+        rel_path = output_path.relative_to(project_path)
+        print(f"Created file: {rel_path}")
+        return rel_path
+
+    # Recursively process template directory respecting .gitignore
+    template_files = get_files_respecting_gitignore(templates_dir, "**/*")
+    for template_file in template_files:
+        if template_file.name != ".gitkeep":
+            # Process template file
+            try:
+                rel_path = process_file(template_file, templates_dir, project_path)
+            except Exception as e:
+                raise RuntimeError(f"failed processing {template_file}") from e
+            if rel_path:
+                files_to_add.append(str(rel_path))
+
+    # Make initial commit if there are no commits yet
     try:
-        # Convert to Path object and resolve to absolute path
-        project_path = Path(path).resolve()
+        # Check if there are any commits
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=project_path,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
 
-        # Create directory if it doesn't exist
-        project_path.mkdir(parents=True, exist_ok=True)
-
-        # Check if git repository already exists
-        git_dir = project_path / ".git"
-        if not git_dir.exists():
-            # Initialize git repository
-            subprocess.run(["git", "init"], cwd=project_path, check=True)
-            print(f"Initialized git repository in {project_path}")
-        else:
-            print(f"Git repository already exists in {project_path}")
-
-        # Create empty codemcp.toml file if it doesn't exist
-        config_file = project_path / "codemcp.toml"
-        if not config_file.exists():
-            with open(config_file, "w") as f:
-                f.write("# codemcp configuration file\n\n")
-            print(f"Created empty codemcp.toml file in {project_path}")
-        else:
-            print(f"codemcp.toml file already exists in {project_path}")
-
-        # Make initial commit if there are no commits yet
-        try:
-            # Check if there are any commits
-            result = subprocess.run(
-                ["git", "rev-parse", "HEAD"],
+        if result.returncode != 0 and files_to_add:
+            # No commits yet, add files and make initial commit
+            for file in files_to_add:
+                subprocess.run(["git", "add", file], cwd=project_path, check=False)
+            commit_msg = "chore: initialize codemcp project"
+            if python:
+                commit_msg += " with Python template"
+            subprocess.run(
+                ["git", "commit", "-m", commit_msg],
                 cwd=project_path,
-                check=False,
-                capture_output=True,
-                text=True,
+                check=True,
             )
+            print(f"Created initial commit with {', '.join(files_to_add)}")
+        else:
+            print("Repository already has commits, not creating initial commit")
+    except subprocess.CalledProcessError as e:
+        print(f"Warning: Failed to create initial commit: {e}")
 
-            if result.returncode != 0:
-                # No commits yet, add codemcp.toml and make initial commit
-                subprocess.run(
-                    ["git", "add", "codemcp.toml"], cwd=project_path, check=True
-                )
-                subprocess.run(
-                    ["git", "commit", "-m", "chore: initialize codemcp project"],
-                    cwd=project_path,
-                    check=True,
-                )
-                print("Created initial commit with codemcp.toml")
-            else:
-                print("Repository already has commits, not creating initial commit")
-        except subprocess.CalledProcessError as e:
-            print(f"Warning: Failed to create initial commit: {e}")
-
-        return f"Successfully initialized codemcp project in {project_path}"
-    except Exception as e:
-        return f"Error initializing project: {e}"
+    success_msg = f"Successfully initialized codemcp project in {project_path}"
+    if python:
+        success_msg += " with Python project structure"
+    return success_msg
 
 
 @click.group(invoke_without_command=True)
@@ -517,13 +777,79 @@ def cli(ctx: click.Context) -> None:
 
 @cli.command()
 @click.argument("path", type=click.Path(), default=".")
-def init(path: str) -> None:
-    """Initialize a new codemcp project with an empty codemcp.toml file and git repository."""
-    result = init_codemcp_project(path)
+@click.option("--python", is_flag=True, help="Initialize with Python project structure")
+def init(path: str, python: bool) -> None:
+    """Initialize a new codemcp project with an empty codemcp.toml file and git repository.
+
+    Use --python flag to create Python project files including pyproject.toml and package structure.
+    """
+    result = init_codemcp_project(path, python)
     click.echo(result)
+
+
+def create_sse_app(allowed_origins: Optional[List[str]] = None) -> Starlette:
+    """Create an SSE app with the MCP server.
+
+    Args:
+        allowed_origins: List of origins to allow CORS for. If None, only claude.ai is allowed.
+
+    Returns:
+        A Starlette application with the MCP server mounted.
+    """
+    if allowed_origins is None:
+        allowed_origins = ["https://claude.ai"]
+
+    app = Starlette(
+        routes=[
+            Mount("/", app=mcp.sse_app()),
+        ]
+    )
+
+    # Add CORS middleware to the app
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=allowed_origins,
+        allow_credentials=True,
+        allow_methods=["GET", "POST"],
+        allow_headers=["*"],
+    )
+
+    return app
 
 
 def run() -> None:
     """Run the MCP server."""
     configure_logging()
     mcp.run()
+
+
+@cli.command()
+@click.option(
+    "--host",
+    default="127.0.0.1",
+    help="Host to bind the server to (default: 127.0.0.1)",
+)
+@click.option("--port", default=8000, help="Port to bind the server to (default: 8000)")
+@click.option(
+    "--cors-origin",
+    multiple=True,
+    help="Origins to allow CORS for (default: https://claude.ai)",
+)
+def serve(host: str, port: int, cors_origin: List[str]) -> None:
+    """Run the MCP SSE server.
+
+    This command mounts the MCP as an SSE server that can be connected to from web applications.
+    By default, it allows CORS requests from claude.ai.
+    """
+    configure_logging()
+    logging.info(f"Starting MCP SSE server on {host}:{port}")
+
+    # If no origins provided, use the default
+    allowed_origins = list(cors_origin) if cors_origin else None
+    if allowed_origins:
+        logging.info(f"Allowing CORS for: {', '.join(allowed_origins)}")
+    else:
+        logging.info("Allowing CORS for: https://claude.ai")
+
+    app = create_sse_app(allowed_origins)
+    uvicorn.run(app, host=host, port=port)

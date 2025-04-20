@@ -129,6 +129,21 @@ Where `$PROJECT_DIR` is the path to the project you want to work on.
 Then chat with Claude about what changes you want to make to the project.
 Every time codemcp makes a change to your code, it will generate a commit.
 
+### Using with claude.ai web interface
+
+You can also use codemcp with the Claude web interface at claude.ai by running the SSE server:
+
+```bash
+codemcp serve
+```
+
+This will start a local SSE server on port 8000 that can be connected to from claude.ai. The server
+has CORS enabled for claude.ai by default. You can customize the host, port, and allowed CORS origins:
+
+```bash
+codemcp serve --host 0.0.0.0 --port 8765 --cors-origin https://claude.ai --cors-origin https://example.com
+```
+
 To see some sample transcripts using this tool, check out:
 
 - [Implement a new feature](https://claude.ai/share/a229d291-6800-4cb8-a0df-896a47602ca0)

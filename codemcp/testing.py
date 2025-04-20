@@ -107,7 +107,12 @@ class MCPEndToEndTestCase(TestCase, unittest.IsolatedAsyncioTestCase):
         By default, it initializes a git repository and creates an initial commit.
         """
         # Initialize and configure git
-        await self.git_run(["init", "-b", "main"])
+        try:
+            await self.git_run(["init", "-b", "main"])
+        except subprocess.CalledProcessError:
+            self.fail(
+                "git version is too old for tests! Please install a newer version of git."
+            )
         await self.git_run(["config", "user.email", "test@example.com"])
         await self.git_run(["config", "user.name", "Test User"])
 

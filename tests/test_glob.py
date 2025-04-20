@@ -1,8 +1,8 @@
 """
-Test for the glob module's pattern matching functionality.
+Test for the glob_pattern module's pattern matching functionality.
 """
 
-from codemcp import glob
+from codemcp import glob_pattern as glob
 
 
 def test_gitignore_simple_asterisk():

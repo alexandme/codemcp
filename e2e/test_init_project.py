@@ -387,14 +387,7 @@ test = ["./run_test.sh"]
                 commit_count, 1, "Should have more than one commit after changes"
             )
 
-    async def test_tilde_expansion(self):
-        """Test that tilde expansion works in the path argument."""
-        # This test is redundant as we have added a dedicated test file for this
-        # feature in test_tilde_expansion.py. Skip this test to avoid setup issues.
-        self.skipTest(
-            "Skipping this test as it's redundant. See test_tilde_expansion.py for proper test."
-        )
-
 
 if __name__ == "__main__":
+    # Run the tests
     unittest.main()

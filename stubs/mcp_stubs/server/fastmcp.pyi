@@ -36,3 +36,11 @@ class FastMCP:
     def run(self) -> None:
         """Run the server."""
         ...
+
+    def sse_app(self) -> Any:
+        """Return an ASGI application for the MCP server that can be used with SSE.
+
+        Returns:
+            An ASGI application
+        """
+        ...

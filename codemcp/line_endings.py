@@ -10,7 +10,7 @@ from typing import Literal, Optional
 import tomli
 from editorconfig import get_properties
 
-from .glob import match as glob_match
+from .glob_pattern import match as glob_match
 
 __all__ = [
     "get_line_ending_preference",
